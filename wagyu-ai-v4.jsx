@@ -301,7 +301,10 @@ function PedigreeForm({pedigree, onChange}) {
   const PF = ({label,path,placeholder}) => (
     <div style={{marginBottom:8}}>
       <div style={{color:C.textDim,fontSize:10,marginBottom:3}}>{label}</div>
-      <input value={pedigree[path.split(".")[0]]?.[path.split(".")[1]]?.name??eval(`pedigree.${path}`)||""} // eslint-disable-line
+<input value={get(pedigree,path)} 
+  onChange={e=>set(path,e.target.value)}
+  placeholder={label} 
+  style={{...inp,fontSize:12,padding:"7px 10px"}}/>
         onChange={e=>set(path,e.target.value)}
         placeholder={placeholder||label} style={{...inp,fontSize:12,padding:"7px 10px"}}/>
     </div>
