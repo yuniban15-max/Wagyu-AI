@@ -8,6 +8,10 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<script>
+// ReactのHooksをグローバルに展開
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
+</script>
 </head>
 <body style="margin:0;background:#f4f9fc">
 <div id="root"></div>
@@ -19,12 +23,13 @@ async function main() {
     .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
     .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
     .replace(/export default function App/g, 'window.App = function App');
-  const result = Babel.transform(code, {
-    presets: ['react'],
-    plugins: []
-  });
-  const fn = new Function('React','ReactDOM','XLSX', result.code);
-  fn(React, ReactDOM, XLSX);
+  const result = Babel.transform(code, { presets: ['react'] });
+  const fn = new Function(
+    'React','ReactDOM','XLSX',
+    'useState','useMemo','useRef','useEffect','useCallback',
+    result.code
+  );
+  fn(React, ReactDOM, XLSX, useState, useMemo, useRef, useEffect, useCallback);
   ReactDOM.createRoot(document.getElementById('root')).render(
     React.createElement(window.App)
   );
