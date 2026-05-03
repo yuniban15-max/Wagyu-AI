@@ -4,26 +4,31 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>WAGYU AI</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 </head>
-<body style="margin:0;padding:0;background:#f4f9fc">
+<body style="margin:0;background:#f4f9fc">
 <div id="root"></div>
 <script>
-fetch('wagyu-ai-v4.jsx')
-  .then(r => r.text())
-  .then(code => {
-    const cleaned = code
-      .replace(/^import.*from.*$/gm, '')
-      .replace(/^export default /m, 'const App = ');
-    const script = document.createElement('script');
-    script.type = 'text/babel';
-    script.text = cleaned + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
-    document.body.appendChild(script);
-    Babel.transformScriptTags();
-  });
+async function main() {
+  const res = await fetch('./wagyu-ai-v4.jsx');
+  let code = await res.text();
+  code = code
+    .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
+    .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
+    .replace(/export default function App/g, 'function App');
+  const result = Babel.transform(code, { presets: ['react'] });
+  const fn = new Function('React','ReactDOM','XLSX', result.code);
+  fn(React, ReactDOM, XLSX);
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    React.createElement(App)
+  );
+}
+main().catch(e => {
+  document.body.innerHTML = '<div style="padding:20px;color:red">エラー: ' + e.message + '</div>';
+});
 </script>
 </body>
 </html>
