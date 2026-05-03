@@ -8,9 +8,34 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-// ReactのHooksをグローバルに展開
 const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+// Supabase初期化（sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-）
+// ※公開キーなので問題なし
+const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// データ保存
+async function saveCattle(data) {
+  const { error } = await supabase
+    .from('cattle_data')
+    .upsert({ user_id: 'default', data: data, updated_at: new Date().toISOString() });
+  if (error) console.error('保存エラー:', error);
+}
+
+// データ読み込み
+async function loadCattle() {
+  const { data, error } = await supabase
+    .from('cattle_data')
+    .select('data')
+    .eq('user_id', 'default')
+    .single();
+  if (error) return null;
+  return data?.data;
+}
 </script>
 </head>
 <body style="margin:0;background:#f4f9fc">
