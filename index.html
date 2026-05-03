@@ -11,11 +11,19 @@
 </head>
 <body style="margin:0;padding:0;background:#f4f9fc">
 <div id="root"></div>
-<script type="text/babel" src="wagyu-ai-v4.jsx" data-type="module"></script>
-<script type="text/babel">
-const domContainer = document.getElementById('root');
-const root = ReactDOM.createRoot(domContainer);
-root.render(React.createElement(App));
+<script>
+fetch('wagyu-ai-v4.jsx')
+  .then(r => r.text())
+  .then(code => {
+    const cleaned = code
+      .replace(/^import.*from.*$/gm, '')
+      .replace(/^export default /m, 'const App = ');
+    const script = document.createElement('script');
+    script.type = 'text/babel';
+    script.text = cleaned + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+    document.body.appendChild(script);
+    Babel.transformScriptTags();
+  });
 </script>
 </body>
 </html>
