@@ -766,6 +766,8 @@ export default function App() {
 
   // ── 起動時にSupabaseからデータ読み込み ──────────────────────────────────
   useEffect(()=>{
+    if(!user) return;
+    setDbReady(false);
     const load = async () => {
       try {
         if(typeof window.loadCattle === "function") {
@@ -780,7 +782,7 @@ export default function App() {
       setDbReady(true);
     };
     load();
-  },[]);
+  },[user]);
 
   // ── cattle変更時に自動保存（サイレント・再描画なし）────────────────────
   useEffect(()=>{
