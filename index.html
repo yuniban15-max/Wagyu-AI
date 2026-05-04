@@ -16,16 +16,26 @@
 const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
 const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
+const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-
+';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function saveCattle(data) {
-  await sb.from('cattle_data').upsert({ user_id:'default', data, updated_at: new Date().toISOString() });
-}
-async function loadCattle() {
-  const { data } = await sb.from('cattle_data').select('data').eq('user_id','default').single();
+window.saveCattle = async function(data) {
+  await sb.from('cattle_data').upsert({
+    user_id: 'default',
+    data: data,
+    updated_at: new Date().toISOString()
+  });
+};
+
+window.loadCattle = async function() {
+  const { data } = await sb
+    .from('cattle_data')
+    .select('data')
+    .eq('user_id', 'default')
+    .single();
   return data?.data || null;
-}
+};
 
 async function main() {
   const res = await fetch('./wagyu-ai-v4.jsx');
@@ -38,12 +48,10 @@ async function main() {
   const fn = new Function(
     'React','ReactDOM','XLSX',
     'useState','useMemo','useRef','useEffect','useCallback',
-    'saveCattle','loadCattle',
     result.code
   );
   fn(React,ReactDOM,XLSX,
-    useState,useMemo,useRef,useEffect,useCallback,
-    saveCattle,loadCattle
+    useState,useMemo,useRef,useEffect,useCallback
   );
   ReactDOM.createRoot(document.getElementById('root')).render(
     React.createElement(window.App)
