@@ -664,8 +664,7 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [showOcr, setShowOcr] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [dbReady, setDbReady] = useState(false); // DB読み込み完了フラグ
-  const [saving, setSaving] = useState(false);   // 保存中フラグ
+  const [dbReady, setDbReady] = useState(false);
 
   // ── 起動時にSupabaseからデータ読み込み ──────────────────────────────────
   useEffect(()=>{
@@ -685,22 +684,14 @@ export default function App() {
     load();
   },[]);
 
-  // ── cattle変更時に自動保存 ────────────────────────────────────────────────
+  // ── cattle変更時に自動保存（サイレント・再描画なし）────────────────────
   useEffect(()=>{
     if(!dbReady) return;
-    const save = async () => {
-      try {
-        if(typeof window.saveCattle === "function") {
-          setSaving(true);
-          await window.saveCattle(cattle);
-          setSaving(false);
-        }
-      } catch(e) {
-        console.log("保存エラー:", e);
-        setSaving(false);
+    const timer = setTimeout(()=>{
+      if(typeof window.saveCattle === "function") {
+        window.saveCattle(cattle).catch(e=>console.log("保存エラー:",e));
       }
-    };
-    const timer = setTimeout(save, 1000);
+    }, 800);
     return () => clearTimeout(timer);
   },[cattle, dbReady]);
 
@@ -873,24 +864,14 @@ export default function App() {
           )}
           {subtitle&&<span style={{color:C.textDim,fontSize:11}}>{subtitle}</span>}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {/* 保存中インジケーター */}
-          {saving&&(
-            <span style={{color:C.green,fontSize:11,fontWeight:600}}>💾 保存中...</span>
-          )}
-          {!saving&&dbReady&&(
-            <span style={{color:C.textDim,fontSize:10}}>✓ 保存済</span>
-          )}
-          {/* 設定ボタン */}
-          {!subtitle&&(
-            <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{
-              background:C.cardSub, border:`1px solid ${C.border}`,
-              color:C.textMid, borderRadius:10, width:36, height:36,
-              display:"flex",alignItems:"center",justifyContent:"center",
-              cursor:"pointer", fontSize:17, flexShrink:0,
-            }}>⚙️</button>
-          )}
-        </div>
+        {!subtitle&&(
+          <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{
+            background:C.cardSub, border:`1px solid ${C.border}`,
+            color:C.textMid, borderRadius:10, width:36, height:36,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            cursor:"pointer", fontSize:17, flexShrink:0,
+          }}>⚙️</button>
+        )}
       </div>
     </div>
   );
