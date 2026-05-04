@@ -13,70 +13,76 @@
 <body style="margin:0;background:#f4f9fc">
 <div id="root"></div>
 <script>
-try {
-  const { useState, useMemo, useRef, useEffect, useCallback } = React;
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
-  const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
+// Supabase（クラウドバックアップ）
+const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
+let sb = null;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) {}
 
-  let sb = null;
+// 保存：まずlocalStorage（即時）→ Supabaseにも保存
+window.saveCattle = async function(data) {
+  // localStorageに即保存
   try {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  } catch(e) {
-    console.log('Supabase初期化エラー:', e);
-  }
+    localStorage.setItem('wagyu_cattle', JSON.stringify(data));
+  } catch(e) {}
+  // Supabaseにも保存（クラウドバックアップ）
+  if(!sb) return;
+  try {
+    await sb.from('cattle_data').delete().eq('user_id','default');
+    await sb.from('cattle_data').insert({
+      user_id: 'default',
+      data: data,
+      updated_at: new Date().toISOString()
+    });
+  } catch(e) { console.log('クラウド保存エラー:', e); }
+};
 
-  window.saveCattle = async function(data) {
-    if(!sb) return;
-    try {
-      await sb.from('cattle_data').upsert({
-        user_id: 'default',
-        data: data,
-        updated_at: new Date().toISOString()
-      });
-    } catch(e) { console.log('保存エラー:', e); }
-  };
-
-  window.loadCattle = async function() {
-    if(!sb) return null;
+// 読み込み：Supabase優先 → なければlocalStorage
+window.loadCattle = async function() {
+  // まずSupabaseから
+  if(sb) {
     try {
       const { data } = await sb
         .from('cattle_data')
         .select('data')
-        .eq('user_id', 'default')
+        .eq('user_id','default')
         .single();
-      return data?.data || null;
-    } catch(e) { return null; }
-  };
-
-  async function main() {
-    const res = await fetch('./wagyu-ai-v4.jsx');
-    let code = await res.text();
-    code = code
-      .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
-      .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
-      .replace(/export default function App/g, 'window.App = function App');
-    const result = Babel.transform(code, { presets: ['react'] });
-    const fn = new Function(
-      'React','ReactDOM','XLSX',
-      'useState','useMemo','useRef','useEffect','useCallback',
-      result.code
-    );
-    fn(React,ReactDOM,XLSX,
-      useState,useMemo,useRef,useEffect,useCallback
-    );
-    ReactDOM.createRoot(document.getElementById('root')).render(
-      React.createElement(window.App)
-    );
+      if(data?.data && Array.isArray(data.data)) {
+        localStorage.setItem('wagyu_cattle', JSON.stringify(data.data));
+        return data.data;
+      }
+    } catch(e) {}
   }
+  // フォールバック：localStorage
+  try {
+    const local = localStorage.getItem('wagyu_cattle');
+    return local ? JSON.parse(local) : null;
+  } catch(e) { return null; }
+};
 
-  main().catch(e=>{
-    document.body.innerHTML='<div style="padding:20px;color:red;font-size:14px">エラー: '+e.message+'</div>';
-  });
-
-} catch(e) {
-  document.body.innerHTML='<div style="padding:20px;color:red;font-size:14px">初期化エラー: '+e.message+'</div>';
+async function main() {
+  const res = await fetch('./wagyu-ai-v4.jsx');
+  let code = await res.text();
+  code = code
+    .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
+    .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
+    .replace(/export default function App/g, 'window.App = function App');
+  const result = Babel.transform(code, { presets: ['react'] });
+  const fn = new Function(
+    'React','ReactDOM','XLSX',
+    'useState','useMemo','useRef','useEffect','useCallback',
+    result.code
+  );
+  fn(React,ReactDOM,XLSX,useState,useMemo,useRef,useEffect,useCallback);
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    React.createElement(window.App)
+  );
 }
+main().catch(e=>{
+  document.body.innerHTML='<div style="padding:20px;color:red;font-size:14px">エラー: '+e.message+'</div>';
+});
 </script>
 </body>
 </html>
