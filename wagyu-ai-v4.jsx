@@ -3285,11 +3285,6 @@ ${csvText.slice(0, 4000)}
 
   // ── AI 解析ページ ──────────────────────────────────────────────────────────
   const AiScreen = () => {
-    <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
-      <AddScreen/>
-      {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
-    </div>
-  );
     const [loading, setLoading] = useState(false);
     const [result,  setResult]  = useState(null);
     const [question, setQuestion] = useState("");
