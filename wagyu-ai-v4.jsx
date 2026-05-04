@@ -8,7 +8,7 @@ const SAMPLE = [
     birthDate:"2024-03-15", introDate:"2025-01-10",
     farm:"宮崎中央市場", pen:"1号棟A", shippingPlan:"2026-08-01",
     expectedPrice:1500000, memo:"おとなしい。発育良好。",
-    pedigree:{a
+    pedigree:{
       sire:{ name:"安福久",
         sire:{ name:"安平",    sire:{name:"第1藤良"}, dam:{name:"菊平"} },
         dam: { name:"福姫",    sire:{name:"糸福"},    dam:{name:"花月"} } },
@@ -865,15 +865,31 @@ export default function App() {
   // ── 設定モーダル ────────────────────────────────────────────────────────────
   const SettingsModal = () => {
     if(!tmpSettings) return null;
-    const set = (k,v) => setTmpSettings(p=>({...p,[k]:v}));
-    const setCost = (k,v) => setTmpSettings(p=>({...p,defaultCosts:{...p.defaultCosts,[k]:Number(v)||0}}));
+    // ローカルstateで管理（入力中に再描画させない）
+    const [localSettings, setLocalSettings] = React.useState(tmpSettings);
+    const setF = (k,v) => setLocalSettings(p=>({...p,[k]:v}));
+    const setCost = (k,v) => setLocalSettings(p=>({...p,defaultCosts:{...p.defaultCosts,[k]:Number(v)||0}}));
+    const compoundDaily = (localSettings.defaultCosts.compoundKgPerDay||0)*(localSettings.defaultCosts.compoundKgPrice||0);
+    const totalDaily = (localSettings.defaultCosts.roughageDaily||0)+compoundDaily+(localSettings.defaultCosts.otherDaily||0);
     const save = () => {
-      setSettings(tmpSettings);
-      try { localStorage.setItem('wagyu_settings', JSON.stringify(tmpSettings)); } catch(e) {}
+      setSettings(localSettings);
+      setTmpSettings(localSettings);
+      try { localStorage.setItem('wagyu_settings', JSON.stringify(localSettings)); } catch(e) {}
       setShowSettings(false);
     };
-    const compoundDaily = (tmpSettings.defaultCosts.compoundKgPerDay||0)*(tmpSettings.defaultCosts.compoundKgPrice||0);
-    const totalDaily    = (tmpSettings.defaultCosts.roughageDaily||0)+compoundDaily+(tmpSettings.defaultCosts.otherDaily||0);
+    const NI = ({label,k,unit,hint,kk}) => (
+      <div style={{marginBottom:14}}>
+        <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>{label}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <input type="number"
+            value={kk ? (localSettings.defaultCosts[kk]||"") : (localSettings.defaultCosts[k]||"")}
+            onChange={e=> kk ? setCost(kk,e.target.value) : setCost(k,e.target.value)}
+            style={{...inp,flex:1}} placeholder="0"/>
+          {unit&&<span style={{color:C.textDim,fontSize:12,whiteSpace:"nowrap"}}>{unit}</span>}
+        </div>
+        {hint&&<div style={{color:C.textDim,fontSize:10,marginTop:3}}>{hint}</div>}
+      </div>
+    );
 
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(30,58,74,0.4)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(3px)"}}>
@@ -892,12 +908,14 @@ export default function App() {
           {/* 農場名 */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{color:C.accentDark,fontWeight:800,fontSize:13,marginBottom:10}}>🏡 農場情報</div>
-            <FInput label="農場名">
-              <input value={tmpSettings.farmName} onChange={e=>set("farmName",e.target.value)} placeholder="例: 田中和牛農場" style={inp}/>
-            </FInput>
-            <FInput label="農場ID（複数スマホで同じIDにすると同じデータが見れます）">
-              <input value={tmpSettings.farmId||""} onChange={e=>set("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
-            </FInput>
+            <div style={{marginBottom:14}}>
+              <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>農場名</div>
+              <input value={localSettings.farmName} onChange={e=>setF("farmName",e.target.value)} placeholder="例: 田中和牛農場" style={inp}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>農場ID（複数スマホで同じIDにすると同じデータが見れます）</div>
+              <input value={localSettings.farmId||""} onChange={e=>setF("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
+            </div>
             <div style={{color:C.textDim,fontSize:11,marginTop:4}}>
               ⚠️ IDを変えるとデータが見えなくなります。全スマホで同じIDにしてください。
             </div>
@@ -906,31 +924,18 @@ export default function App() {
           {/* デフォルトコスト */}
           <div style={{background:C.greenLight,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.green}22`}}>
             <div style={{color:C.green,fontWeight:800,fontSize:13,marginBottom:12}}>🌾 基本飼養コスト（新規導入時のデフォルト）</div>
-
-            <FInput label="粗飼料費（円/日）" hint="牧草・稲わらなど">
-              <input type="number" value={tmpSettings.defaultCosts.roughageDaily||""} onChange={e=>setCost("roughageDaily",e.target.value)} placeholder="例: 400" style={inp}/>
-            </FInput>
-
+            <NI label="粗飼料費（円/日）" k="roughageDaily" unit="円/日" hint="牧草・稲わらなど"/>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginBottom:10}}>
               <div style={{color:C.textMid,fontSize:12,fontWeight:700,marginBottom:8}}>配合飼料</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <FInput label="給与量（kg/日）">
-                  <input type="number" step="0.5" value={tmpSettings.defaultCosts.compoundKgPerDay||""} onChange={e=>setCost("compoundKgPerDay",e.target.value)} placeholder="例: 8" style={inp}/>
-                </FInput>
-                <FInput label="単価（円/kg）">
-                  <input type="number" value={tmpSettings.defaultCosts.compoundKgPrice||""} onChange={e=>setCost("compoundKgPrice",e.target.value)} placeholder="例: 80" style={inp}/>
-                </FInput>
+                <NI label="給与量（kg/日）" k="compoundKgPerDay" unit="kg/日"/>
+                <NI label="単価（円/kg）" k="compoundKgPrice" unit="円/kg"/>
               </div>
               <div style={{background:"#fff",borderRadius:8,padding:"8px 12px",fontSize:12,color:C.green,fontWeight:700}}>
                 配合コスト: ¥{compoundDaily.toLocaleString()}/日
               </div>
             </div>
-
-            <FInput label="その他日常経費（円/日）" hint="光熱費・消耗品など">
-              <input type="number" value={tmpSettings.defaultCosts.otherDaily||""} onChange={e=>setCost("otherDaily",e.target.value)} placeholder="例: 200" style={inp}/>
-            </FInput>
-
-            {/* 合計 */}
+            <NI label="その他日常経費（円/日）" k="otherDaily" unit="円/日" hint="光熱費・消耗品など"/>
             <div style={{background:"#fff",border:`1.5px solid ${C.green}44`,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{color:C.textMid,fontSize:13}}>飼養コスト合計</span>
               <span style={{color:C.green,fontWeight:900,fontSize:18}}>¥{totalDaily.toLocaleString()}<span style={{fontSize:11,fontWeight:400}}>/日</span></span>
@@ -940,9 +945,7 @@ export default function App() {
           {/* 固定経費 */}
           <div style={{background:C.amberLight,borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1px solid ${C.amber}22`}}>
             <div style={{color:C.amber,fontWeight:800,fontSize:13,marginBottom:10}}>🏗️ 固定経費（通期）</div>
-            <FInput label="固定経費（円）" hint="施設費・減価償却など">
-              <input type="number" value={tmpSettings.defaultCosts.fixedOther||""} onChange={e=>setCost("fixedOther",e.target.value)} placeholder="例: 30000" style={inp}/>
-            </FInput>
+            <NI label="固定経費（円）" k="fixedOther" unit="円" hint="施設費・減価償却など"/>
           </div>
 
           {/* 保存 */}
