@@ -2101,7 +2101,6 @@ export default function App() {
             <Btn full onClick={()=>{update(cow.id,c=>({...c,status:"出荷済",result:{sellPrice:Number(rForm.sellPrice)||0,bms:Number(rForm.bms)||null,loinArea:Number(rForm.loinArea)||null,ribThickness:Number(rForm.ribThickness)||null,yieldGrade:rForm.yieldGrade,grade:rForm.grade,dg:Number(rForm.dg)||null}}));setModal(null);}}>登録する</Btn>
           </Modal>
         )}
-      </div>
 
       {/* ── 編集モーダル ── */}
       {showEdit&&editForm&&(
