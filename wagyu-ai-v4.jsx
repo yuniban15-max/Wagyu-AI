@@ -717,11 +717,8 @@ export default function App() {
   });
 
   const emptyNew = makeEmptyNew();
-  const [newForm, setNewForm] = useState(emptyNew);
-  const [wForm, setWForm] = useState({date:new Date().toISOString().slice(0,10),weight:""});
-  const [vForm, setVForm] = useState({date:new Date().toISOString().slice(0,10),name:"",nextDate:""});
-  const [tForm, setTForm] = useState({date:new Date().toISOString().slice(0,10),name:"",drug:"",vet:"",cost:""});
-  const [rForm, setRForm] = useState({sellPrice:"",bms:"",loinArea:"",ribThickness:"",yieldGrade:"A",grade:"A5",dg:""});
+  const [pendingOcr, setPendingOcr] = useState(null); // OCR結果の一時保存
+  const [addFormKey, setAddFormKey] = useState(0);    // AddScreenをリセット用
   const [editCosts, setEditCosts] = useState(false);
   const [tmpCosts, setTmpCosts] = useState(null);
 
@@ -827,18 +824,7 @@ export default function App() {
 
   // Apply OCR result to new form
   const applyOcr = (result) => {
-    setNewForm(prev=>({
-      ...prev,
-      tag: result.tag||prev.tag,
-      name: result.name||prev.name,
-      sex: result.sex||prev.sex,
-      breed: result.breed||prev.breed,
-      birthDate: result.birthDate||prev.birthDate,
-      pedigree: result.pedigree ? {
-        sire: mergeNode(prev.pedigree.sire, result.pedigree.sire),
-        dam:  mergeNode(prev.pedigree.dam,  result.pedigree.dam),
-      } : prev.pedigree,
-    }));
+    setPendingOcr(result);
     setShowOcr(false);
     setPage("add");
   };
@@ -1134,7 +1120,7 @@ export default function App() {
               <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:C.textDim}}>🔍</span>
               <input placeholder="耳標・名前・牛舎・血統で検索" value={search} onChange={e=>setSearch(e.target.value)} style={{...inp,paddingLeft:34,borderRadius:24}}/>
             </div>
-            <Btn variant="outline" onClick={()=>{setNewForm(makeEmptyNew());setPage("add");}}>1頭追加</Btn>
+            <Btn variant="outline" onClick={()=>{setAddFormKey(k=>k+1); setPage("add");}}>1頭追加</Btn>
           </div>
 
           {/* ── 並び替え ── */}
@@ -1724,8 +1710,31 @@ export default function App() {
 
   // ── ADD SCREEN ─────────────────────────────────────────────────────────────
   const AddScreen = () => {
-    const set=(k,v)=>setNewForm(p=>({...p,[k]:v}));
+    // ── フォームstateはここで管理（Appの再描画を防ぐ）──
+    const [newForm, setNewForm] = useState(makeEmptyNew());
     const [addTab, setAddTab] = useState("basic");
+
+    // OCRデータが来たらフォームに反映
+    useEffect(()=>{
+      if(!pendingOcr) return;
+      const merge = (base, src) => {
+        if(!src) return base;
+        return { name:src.name||base?.name||"", sire:merge(base?.sire,src.sire), dam:merge(base?.dam,src.dam) };
+      };
+      setNewForm(prev=>({
+        ...prev,
+        tag:      pendingOcr.tag||prev.tag,
+        name:     pendingOcr.name||prev.name,
+        sex:      pendingOcr.sex||prev.sex,
+        breed:    pendingOcr.breed||prev.breed,
+        birthDate:pendingOcr.birthDate||prev.birthDate,
+        pedigree: pendingOcr.pedigree ? {
+          sire: merge(prev.pedigree.sire, pendingOcr.pedigree.sire),
+          dam:  merge(prev.pedigree.dam,  pendingOcr.pedigree.dam),
+        } : prev.pedigree,
+      }));
+      setPendingOcr(null);
+    },[pendingOcr]);
     const submit=()=>{
       if(!newForm.tag) return;
       setCattle(p=>[...p,{...newForm,id:Date.now().toString(),expectedPrice:Number(newForm.expectedPrice)||0,weights:[],vaccines:[],treatments:[],result:null}]);
@@ -1795,6 +1804,11 @@ export default function App() {
   // ── DETAIL ─────────────────────────────────────────────────────────────────
   const DetailScreen = () => {
     if(!cow) return null;
+    // ── モーダルフォームstateはここで管理（Appの再描画を防ぐ）──
+    const [wForm, setWForm] = useState({date:new Date().toISOString().slice(0,10),weight:""});
+    const [vForm, setVForm] = useState({date:new Date().toISOString().slice(0,10),name:"",nextDate:""});
+    const [tForm, setTForm] = useState({date:new Date().toISOString().slice(0,10),name:"",drug:"",vet:"",cost:""});
+    const [rForm, setRForm] = useState({sellPrice:"",bms:"",loinArea:"",ribThickness:"",yieldGrade:"A",grade:"A5",dg:""});
     const du=daysUntil(cow.shippingPlan);
     const cv=calcCosts(cow);
     return (
@@ -3093,7 +3107,7 @@ ${csvText.slice(0, 4000)}
 
   // ── ADD PAGE ───────────────────────────────────────────────────────────────
   if(page==="add") return (
-    <div style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
+    <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
       <AddScreen/>
       {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
     </div>
