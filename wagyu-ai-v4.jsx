@@ -8,7 +8,7 @@ const SAMPLE = [
     birthDate:"2024-03-15", introDate:"2025-01-10",
     farm:"宮崎中央市場", pen:"1号棟A", shippingPlan:"2026-08-01",
     expectedPrice:1500000, memo:"おとなしい。発育良好。",
-    pedigree:{
+    pedigree:{a
       sire:{ name:"安福久",
         sire:{ name:"安平",    sire:{name:"第1藤良"}, dam:{name:"菊平"} },
         dam: { name:"福姫",    sire:{name:"糸福"},    dam:{name:"花月"} } },
@@ -3322,7 +3322,7 @@ ${JSON.stringify(summary, null, 2)}
           borderBottom:`1px solid ${C.border}`,
           padding:"18px 20px 16px",
         }}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
             <div style={{
               width:44,height:44,borderRadius:14,
               background:`linear-gradient(135deg,${C.accent},${C.accentDark})`,
@@ -3332,6 +3332,35 @@ ${JSON.stringify(summary, null, 2)}
             <div>
               <div style={{color:C.text,fontWeight:900,fontSize:18}}>WAGYU AI 解析</div>
               <div style={{color:C.textMid,fontSize:12}}>農場データをAIが分析・提案します</div>
+            </div>
+          </div>
+
+          {/* 料金表示バナー */}
+          <div style={{
+            background:"#fff",
+            border:`1.5px solid ${C.accent}66`,
+            borderRadius:14, padding:"12px 16px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            boxShadow:`0 2px 10px ${C.accent}18`,
+          }}>
+            <div>
+              <div style={{color:C.textDim,fontSize:10,fontWeight:600,letterSpacing:1,marginBottom:2}}>AI解析オプション</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:4}}>
+                <span style={{color:C.accent,fontWeight:900,fontSize:22}}>¥3,980</span>
+                <span style={{color:C.textDim,fontSize:12}}>/月から</span>
+              </div>
+              <div style={{color:C.textDim,fontSize:10,marginTop:2}}>14日間無料トライアル</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{
+                background:`linear-gradient(135deg,${C.accent},${C.accentDark})`,
+                color:"#fff", borderRadius:20, padding:"8px 18px",
+                fontSize:13, fontWeight:800, cursor:"pointer",
+                boxShadow:`0 3px 10px ${C.accent}44`,
+              }}>
+                申し込む →
+              </div>
+              <div style={{color:C.textDim,fontSize:10,marginTop:4}}>準備中</div>
             </div>
           </div>
         </div>
