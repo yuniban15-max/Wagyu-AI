@@ -1735,6 +1735,9 @@ export default function App() {
       }));
       setPendingOcr(null);
     },[pendingOcr]);
+
+    const set = (k,v) => setNewForm(p=>({...p,[k]:v}));
+
     const submit=()=>{
       if(!newForm.tag) return;
       setCattle(p=>[...p,{...newForm,id:Date.now().toString(),expectedPrice:Number(newForm.expectedPrice)||0,weights:[],vaccines:[],treatments:[],result:null}]);
