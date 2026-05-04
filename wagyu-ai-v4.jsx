@@ -671,14 +671,10 @@ export default function App() {
   useEffect(()=>{
     const load = async () => {
       try {
-        // loadCattleはindex.htmlでグローバルに定義
-        if(typeof loadCattle === "function") {
-          const saved = await loadCattle();
+        if(typeof window.loadCattle === "function") {
+          const saved = await window.loadCattle();
           if(saved && Array.isArray(saved) && saved.length > 0) {
             setCattle(saved);
-          }
-          if(saved?.settings) {
-            setSettings(saved.settings);
           }
         }
       } catch(e) {
@@ -691,12 +687,12 @@ export default function App() {
 
   // ── cattle変更時に自動保存 ────────────────────────────────────────────────
   useEffect(()=>{
-    if(!dbReady) return; // 初回読み込み前は保存しない
+    if(!dbReady) return;
     const save = async () => {
       try {
-        if(typeof saveCattle === "function") {
+        if(typeof window.saveCattle === "function") {
           setSaving(true);
-          await saveCattle(cattle);
+          await window.saveCattle(cattle);
           setSaving(false);
         }
       } catch(e) {
@@ -704,7 +700,7 @@ export default function App() {
         setSaving(false);
       }
     };
-    const timer = setTimeout(save, 1000); // 1秒後に保存（連続更新を間引く）
+    const timer = setTimeout(save, 1000);
     return () => clearTimeout(timer);
   },[cattle, dbReady]);
 
