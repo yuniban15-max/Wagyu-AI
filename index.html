@@ -15,136 +15,67 @@
 <script>
 const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
-// ── Supabase設定（自分のキーに変える） ───────────────────────────────────────
 const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
-
 let sb = null;
-try {
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-} catch(e) {
-  console.log('Supabase初期化エラー:', e);
-}
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) {}
 
-// ── 認証関数 ──────────────────────────────────────────────────────────────────
-window.getUser = async function() {
-  if(!sb) return null;
+window.getFarmId = function() {
   try {
-    const { data: { user } } = await sb.auth.getUser();
-    return user || null;
-  } catch(e) { return null; }
+    const s = localStorage.getItem('wagyu_settings');
+    const settings = s ? JSON.parse(s) : {};
+    return settings.farmId || 'default';
+  } catch(e) { return 'default'; }
 };
 
-window.signIn = async function(email, password) {
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if(error) throw error;
-  return data.user;
-};
-
-window.signUp = async function(email, password) {
-  const { data, error } = await sb.auth.signUp({ email, password });
-  if(error) throw error;
-  return data.user;
-};
-
-window.signOut = async function() {
-  if(sb) await sb.auth.signOut();
-  localStorage.clear();
-  location.reload();
-};
-
-// ── データ保存・読み込み ──────────────────────────────────────────────────────
-window.getCurrentUserId = async function() {
-  const user = await window.getUser();
-  return user?.id || null;
-};
-
-window.saveCattle = async function(data) {
-  const userId = await window.getCurrentUserId();
-  const key = 'wagyu_cattle_' + (userId || 'default');
-  try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) {}
-  if(!userId || !sb) return;
+window.saveCow = async function(cow) {
+  if(!sb) return;
+  const farmId = window.getFarmId();
   try {
-    await sb.from('cattle_data').delete().eq('user_id', userId);
-    await sb.from('cattle_data').insert({
-      user_id: userId,
-      data: data,
+    await sb.from('cattle_records').upsert({
+      id: cow.id, farm_id: farmId, data: cow,
       updated_at: new Date().toISOString()
     });
-  } catch(e) { console.log('クラウド保存エラー:', e); }
+  } catch(e) { console.log('保存エラー:', e); }
 };
 
-window.loadCattle = async function() {
-  const userId = await window.getCurrentUserId();
-  const key = 'wagyu_cattle_' + (userId || 'default');
-  if(userId && sb) {
-    try {
-      const { data } = await sb
-        .from('cattle_data')
-        .select('data')
-        .eq('user_id', userId)
-        .single();
-      if(data?.data && Array.isArray(data.data)) {
-        localStorage.setItem(key, JSON.stringify(data.data));
-        return data.data;
-      }
-    } catch(e) {}
-  }
+window.deleteCowRemote = async function(id) {
+  if(!sb) return;
+  try { await sb.from('cattle_records').delete().eq('id', id); } catch(e) {}
+};
+
+window.loadAllCattle = async function() {
+  if(!sb) return null;
+  const farmId = window.getFarmId();
   try {
-    const local = localStorage.getItem(key);
-    return local ? JSON.parse(local) : null;
-  } catch(e) { return null; }
+    const { data, error } = await sb
+      .from('cattle_records').select('data')
+      .eq('farm_id', farmId)
+      .order('updated_at', { ascending: false });
+    if(error) throw error;
+    return data ? data.map(r => r.data) : [];
+  } catch(e) { console.log('読み込みエラー:', e); return null; }
 };
 
-// ── アプリ起動 ────────────────────────────────────────────────────────────────
 async function main() {
   const res = await fetch('./wagyu-ai-v4.jsx');
-  if(!res.ok) throw new Error('wagyu-ai-v4.jsx の読み込みに失敗: ' + res.status);
-
+  if(!res.ok) throw new Error('ファイル読み込み失敗: ' + res.status);
   let code = await res.text();
   code = code
     .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
     .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
     .replace(/export default function App/g, 'window.App = function App');
-
   let result;
-  try {
-    result = Babel.transform(code, { presets: ['react'] });
-  } catch(e) {
-    throw new Error('Babel変換エラー: ' + e.message);
-  }
-
-  const fn = new Function(
-    'React','ReactDOM','XLSX',
-    'useState','useMemo','useRef','useEffect','useCallback',
-    result.code
-  );
+  try { result = Babel.transform(code, { presets: ['react'] }); }
+  catch(e) { throw new Error('Babel変換エラー: ' + e.message); }
+  const fn = new Function('React','ReactDOM','XLSX','useState','useMemo','useRef','useEffect','useCallback', result.code);
   fn(React, ReactDOM, XLSX, useState, useMemo, useRef, useEffect, useCallback);
-
   if(!window.App) throw new Error('App関数が見つかりません');
-
-  ReactDOM.createRoot(document.getElementById('root')).render(
-    React.createElement(window.App)
-  );
+  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(window.App));
 }
 
 main().catch(e => {
-  console.error('起動エラー:', e);
-  document.body.innerHTML = `
-    <div style="padding:24px;font-family:sans-serif;max-width:500px">
-      <div style="color:#e86060;font-weight:bold;font-size:16px;margin-bottom:12px">
-        ⚠️ 起動エラー
-      </div>
-      <div style="background:#fdeaea;border-radius:8px;padding:12px;font-size:13px;word-break:break-all;color:#c0392b">
-        ${e.message}
-      </div>
-      <div style="margin-top:16px;font-size:12px;color:#666">
-        このエラー内容をスクショしてお知らせください。
-      </div>
-      <button onclick="location.reload()" style="margin-top:12px;background:#4ab8e8;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">
-        再読み込み
-      </button>
-    </div>`;
+  document.body.innerHTML = '<div style="padding:24px;font-family:sans-serif"><div style="color:#e86060;font-weight:bold;font-size:16px;margin-bottom:12px">起動エラー</div><div style="background:#fdeaea;border-radius:8px;padding:12px;font-size:13px;word-break:break-all;color:#c0392b">' + e.message + '</div><button onclick="location.reload()" style="margin-top:12px;background:#4ab8e8;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">再読み込み</button></div>';
 });
 </script>
 </body>
