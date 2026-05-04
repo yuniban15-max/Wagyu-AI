@@ -3283,18 +3283,13 @@ ${csvText.slice(0, 4000)}
     );
   };
 
-  if(page==="shipResult") return <ShipResultScreen/>;
-  if(page==="intake") return <IntakeScreen/>;
-
-  // ── ADD PAGE ───────────────────────────────────────────────────────────────
-  if(page==="add") return (
+  // ── AI 解析ページ ──────────────────────────────────────────────────────────
+  const AiScreen = () => {
     <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
       <AddScreen/>
       {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
     </div>
   );
-  // ── AI 解析ページ ──────────────────────────────────────────────────────────
-  const AiScreen = () => {
     const [loading, setLoading] = useState(false);
     const [result,  setResult]  = useState(null);
     const [question, setQuestion] = useState("");
@@ -3505,6 +3500,17 @@ ${JSON.stringify(summary, null, 2)}
   };
 
   // ── NAV ITEMS ──────────────────────────────────────────────────────────────
+
+  // ページ別早期return
+  if(page==="shipResult") return <ShipResultScreen/>;
+  if(page==="intake")     return <IntakeScreen/>;
+  if(page==="add") return (
+    <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
+      <AddScreen/>
+      {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
+    </div>
+  );
+
   const navItems=[
     {id:"home",     icon:"🏠", label:"ホーム"},
     {id:"schedule", icon:"📅", label:"出荷予定"},
