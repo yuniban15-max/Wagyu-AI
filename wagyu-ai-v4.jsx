@@ -1777,16 +1777,16 @@ export default function App() {
         <div style={{padding:"16px 16px"}}>
           {addTab==="basic"&&(
             <>
-              <F label="耳標番号 ＊" k="tag" placeholder="例: 宮崎-0099"/>
-              <F label="名前" k="name" placeholder="例: 黒王"/>
-              <F label="性別" k="sex" opts={["去勢","雌","雄"]}/>
-              <F label="品種" k="breed" opts={["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"]}/>
-              <F label="生年月日" k="birthDate" type="date"/>
-              <F label="導入日 ＊" k="introDate" type="date"/>
-              <F label="導入元市場" k="farm" placeholder="例: 宮崎中央市場"/>
-              <F label="牛舎・ペン" k="pen" placeholder="例: 2号棟A"/>
-              <F label="出荷予定日" k="shippingPlan" type="date"/>
-              <F label="予想販売価格（円）" k="expectedPrice" type="number" placeholder="例: 1500000"/>
+              {F({label:"耳標番号 ＊", k:"tag", placeholder:"例: 宮崎-0099"})}
+              {F({label:"名前", k:"name", placeholder:"例: 黒王"})}
+              {F({label:"性別", k:"sex", opts:["去勢","雌","雄"]})}
+              {F({label:"品種", k:"breed", opts:["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"]})}
+              {F({label:"生年月日", k:"birthDate", type:"date"})}
+              {F({label:"導入日 ＊", k:"introDate", type:"date"})}
+              {F({label:"導入元市場", k:"farm", placeholder:"例: 宮崎中央市場"})}
+              {F({label:"牛舎・ペン", k:"pen", placeholder:"例: 2号棟A"})}
+              {F({label:"出荷予定日", k:"shippingPlan", type:"date"})}
+              {F({label:"予想販売価格（円）", k:"expectedPrice", type:"number", placeholder:"例: 1500000"})}
               <FInput label="メモ"><textarea value={newForm.memo} onChange={e=>set("memo",e.target.value)} style={{...inp,height:70,resize:"vertical"}}/></FInput>
             </>
           )}
