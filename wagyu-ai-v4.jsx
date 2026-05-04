@@ -2106,63 +2106,44 @@ export default function App() {
       {/* ── 編集モーダル ── */}
       {showEdit&&editForm&&(
         <Modal title="✏️ 個体情報を編集" onClose={()=>setShowEdit(false)}>
-          <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",scrollbarWidth:"none"}}>
-            {[["basic","📋 基本"],["pedigree","🧬 血統"],["costs","💴 コスト"]].map(([k,v])=>(
-              <button key={k} onClick={()=>setDetailTab(k==="basic"?"editBasic":k==="pedigree"?"editPedigree":"editCosts")} style={{background:detailTab===`edit${k.charAt(0).toUpperCase()+k.slice(1)}`?`linear-gradient(135deg,${C.accent},${C.accentDark})`:"transparent",color:detailTab===`edit${k.charAt(0).toUpperCase()+k.slice(1)}`?"#fff":C.textMid,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
-                {v}
-              </button>
-            ))}
-          </div>
-
-          {/* 基本情報 */}
-          <div>
-            {[
-              {label:"耳標番号",k:"tag",type:"text",ph:"例: 宮崎-0099"},
-              {label:"名前",k:"name",type:"text",ph:"例: 黒王"},
-              {label:"生年月日",k:"birthDate",type:"date"},
-              {label:"導入日",k:"introDate",type:"date"},
-              {label:"導入元市場",k:"farm",type:"text",ph:"例: 宮崎中央市場"},
-              {label:"牛舎・ペン",k:"pen",type:"text",ph:"例: 2号棟A"},
-              {label:"出荷予定日",k:"shippingPlan",type:"date"},
-              {label:"予想販売価格（円）",k:"expectedPrice",type:"number"},
-            ].map(({label,k,type,ph})=>(
-              <FInput key={k} label={label}>
-                <input type={type} placeholder={ph||""} value={editForm[k]||""}
-                  onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))} style={inp}/>
-              </FInput>
-            ))}
-            <FInput label="性別">
-              <select value={editForm.sex} onChange={e=>setEditForm(p=>({...p,sex:e.target.value}))} style={inp}>
-                {["去勢","雌","雄"].map(o=><option key={o}>{o}</option>)}
-              </select>
+          {[
+            {label:"耳標番号",k:"tag",type:"text",ph:"例: 宮崎-0099"},
+            {label:"名前",k:"name",type:"text",ph:"例: 黒王"},
+            {label:"生年月日",k:"birthDate",type:"date"},
+            {label:"導入日",k:"introDate",type:"date"},
+            {label:"導入元市場",k:"farm",type:"text",ph:"例: 宮崎中央市場"},
+            {label:"牛舎・ペン",k:"pen",type:"text",ph:"例: 2号棟A"},
+            {label:"出荷予定日",k:"shippingPlan",type:"date"},
+            {label:"予想販売価格（円）",k:"expectedPrice",type:"number"},
+          ].map(({label,k,type,ph})=>(
+            <FInput key={k} label={label}>
+              <input type={type} placeholder={ph||""} value={editForm[k]||""}
+                onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))} style={inp}/>
             </FInput>
-            <FInput label="品種">
-              <select value={editForm.breed} onChange={e=>setEditForm(p=>({...p,breed:e.target.value}))} style={inp}>
-                {["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"].map(o=><option key={o}>{o}</option>)}
-              </select>
-            </FInput>
-            <FInput label="メモ">
-              <textarea value={editForm.memo} onChange={e=>setEditForm(p=>({...p,memo:e.target.value}))} style={{...inp,height:70,resize:"vertical"}}/>
-            </FInput>
-            <div style={{marginBottom:12}}>
-              <div style={{color:C.textMid,fontSize:11,fontWeight:600,marginBottom:6}}>血統（父）</div>
-              <PedigreeForm pedigree={editForm.pedigree} onChange={p=>setEditForm(prev=>({...prev,pedigree:p}))}/>
-            </div>
-            <CostForm costs={editForm.costs} onChange={c=>setEditForm(prev=>({...prev,costs:c}))}/>
-          </div>
-
+          ))}
+          <FInput label="性別">
+            <select value={editForm.sex} onChange={e=>setEditForm(p=>({...p,sex:e.target.value}))} style={inp}>
+              {["去勢","雌","雄"].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </FInput>
+          <FInput label="品種">
+            <select value={editForm.breed} onChange={e=>setEditForm(p=>({...p,breed:e.target.value}))} style={inp}>
+              {["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </FInput>
+          <FInput label="メモ">
+            <textarea value={editForm.memo} onChange={e=>setEditForm(p=>({...p,memo:e.target.value}))} style={{...inp,height:60,resize:"vertical"}}/>
+          </FInput>
           <Btn full onClick={saveEdit}>保存する</Btn>
         </Modal>
       )}
 
       {/* ── 削除確認モーダル ── */}
       {showDelConfirm&&(
-        <Modal title="🗑️ 削除の確認" onClose={()=>setShowDelConfirm(false)}>
-          <div style={{textAlign:"center",padding:"16px 0"}}>
+        <Modal title="削除の確認" onClose={()=>setShowDelConfirm(false)}>
+          <div style={{textAlign:"center",padding:"8px 0"}}>
             <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
-            <div style={{color:C.text,fontWeight:700,fontSize:16,marginBottom:8}}>
-              {cow.tag}　{cow.name}
-            </div>
+            <div style={{color:C.text,fontWeight:700,fontSize:16,marginBottom:8}}>{cow.tag}　{cow.name}</div>
             <div style={{color:C.textMid,fontSize:13,marginBottom:24,lineHeight:1.7}}>
               この個体を削除します。<br/>
               <b style={{color:C.red}}>削除したデータは元に戻せません。</b>
