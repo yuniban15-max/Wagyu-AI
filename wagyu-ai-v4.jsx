@@ -656,16 +656,6 @@ JSONのみ返してください。前置き・説明・バッククォートは�
 // MAIN APP
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  // ── 認証state ──────────────────────────────────────────────────────────────
-  const [user,         setUser]         = useState(null);
-  const [authMode,     setAuthMode]     = useState("login");
-  const [authEmail,    setAuthEmail]    = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authLoading,  setAuthLoading]  = useState(false);
-  const [authError,    setAuthError]    = useState("");
-  const [authChecked,  setAuthChecked]  = useState(false);
-
-  // ── アプリstate（全部ここに集める）────────────────────────────────────────
   const [cattle,       setCattle]       = useState(SAMPLE);
   const [page,         setPage]         = useState("home");
   const [selectedId,   setSelectedId]   = useState(null);
@@ -683,19 +673,12 @@ export default function App() {
   const [tmpCosts,     setTmpCosts]     = useState(null);
   const [settings,     setSettings]     = useState({
     farmName: "",
-    defaultCosts: { roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
+    defaultCosts:{ roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
   });
-  const [tmpSettings,  setTmpSettings]  = useState(null);
+  const [tmpSettings, setTmpSettings] = useState(null);
 
-  // ── 起動時に認証チェック ──────────────────────────────────────────────────
+  // ── 起動時にデータ読み込み ────────────────────────────────────────────────
   useEffect(()=>{
-    window.getUser().then(u=>{ setUser(u); setAuthChecked(true); });
-  },[]);
-
-  // ── ログイン後にデータ読み込み ────────────────────────────────────────────
-  useEffect(()=>{
-    if(!user) return;
-    setDbReady(false);
     const load = async () => {
       try {
         if(typeof window.loadCattle === "function") {
@@ -706,91 +689,17 @@ export default function App() {
       setDbReady(true);
     };
     load();
-  },[user]);
+  },[]);
 
   // ── 自動保存 ──────────────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!dbReady || !user) return;
+    if(!dbReady) return;
     const timer = setTimeout(()=>{
       if(typeof window.saveCattle === "function")
         window.saveCattle(cattle).catch(e=>console.log("保存エラー:",e));
     }, 800);
     return ()=>clearTimeout(timer);
-  },[cattle, dbReady, user]);
-
-  // ── ログイン処理 ──────────────────────────────────────────────────────────
-  const handleAuth = async () => {
-    setAuthLoading(true); setAuthError("");
-    try {
-      if(authMode==="signup") {
-        await window.signUp(authEmail, authPassword);
-        setAuthMode("done");
-      } else {
-        const u = await window.signIn(authEmail, authPassword);
-        setUser(u);
-      }
-    } catch(e) {
-      setAuthError(e.message==="Invalid login credentials"?"メールアドレスまたはパスワードが違います":e.message);
-    }
-    setAuthLoading(false);
-  };
-
-  // ── 認証チェック中 ────────────────────────────────────────────────────────
-  if(!authChecked) return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f4f9fc",fontFamily:"'Hiragino Kaku Gothic Pro',sans-serif"}}>
-      <div style={{textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:12}}>🐂</div>
-        <div style={{color:"#4ab8e8",fontWeight:700}}>読み込み中...</div>
-      </div>
-    </div>
-  );
-
-  // ── 未ログイン → ログイン画面 ─────────────────────────────────────────────
-  if(!user) return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#e0f4fd 0%,#f4f9fc 50%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px",fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif"}}>
-      <div style={{textAlign:"center",marginBottom:32}}>
-        <div style={{fontSize:52,marginBottom:8}}>🐂</div>
-        <div style={{background:"linear-gradient(135deg,#4ab8e8,#2a8ec4)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontSize:30,fontWeight:900,letterSpacing:3,fontFamily:"Georgia,serif"}}>WAGYU AI</div>
-        <div style={{color:"#4a7a92",fontSize:13,marginTop:4}}>和牛AI管理システム</div>
-      </div>
-      {authMode==="done" ? (
-        <div style={{background:"#fff",borderRadius:20,border:"1px solid #cfe8f4",padding:"28px 24px",width:"100%",maxWidth:380,textAlign:"center",boxShadow:"0 4px 24px rgba(74,184,232,0.12)"}}>
-          <div style={{fontSize:40,marginBottom:12}}>📧</div>
-          <div style={{color:"#1e3a4a",fontWeight:700,fontSize:16,marginBottom:8}}>確認メールを送りました</div>
-          <div style={{color:"#4a7a92",fontSize:13,lineHeight:1.7,marginBottom:20}}>{authEmail} に届いたリンクをタップしてアカウントを有効化してください。</div>
-          <button onClick={()=>setAuthMode("login")} style={{background:"linear-gradient(135deg,#4ab8e8,#2a8ec4)",color:"#fff",border:"none",borderRadius:12,padding:"11px 0",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer"}}>ログイン画面へ</button>
-        </div>
-      ) : (
-        <div style={{background:"#fff",borderRadius:20,border:"1px solid #cfe8f4",padding:"28px 24px",width:"100%",maxWidth:380,boxShadow:"0 4px 24px rgba(74,184,232,0.12)"}}>
-          <div style={{display:"flex",gap:8,marginBottom:24}}>
-            {[["login","ログイン"],["signup","新規登録"]].map(([m,l])=>(
-              <button key={m} onClick={()=>{setAuthMode(m);setAuthError("");}} style={{flex:1,background:authMode===m?"linear-gradient(135deg,#4ab8e8,#2a8ec4)":"transparent",color:authMode===m?"#fff":"#8ab4c8",border:`1.5px solid ${authMode===m?"#4ab8e8":"#cfe8f4"}`,borderRadius:10,padding:"9px 0",fontSize:14,fontWeight:700,cursor:"pointer"}}>{l}</button>
-            ))}
-          </div>
-          {authError&&<div style={{background:"#fdeaea",color:"#e86060",borderRadius:8,padding:"8px 12px",fontSize:12,marginBottom:14}}>{authError}</div>}
-          <div style={{marginBottom:14}}>
-            <div style={{color:"#4a7a92",fontSize:12,fontWeight:600,marginBottom:6}}>メールアドレス</div>
-            <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="example@farm.jp" style={{width:"100%",background:"#f4f9fc",border:"1.5px solid #cfe8f4",color:"#1e3a4a",borderRadius:10,padding:"10px 14px",fontSize:14,boxSizing:"border-box",outline:"none"}}/>
-          </div>
-          <div style={{marginBottom:22}}>
-            <div style={{color:"#4a7a92",fontSize:12,fontWeight:600,marginBottom:6}}>パスワード</div>
-            <input type="password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder="8文字以上" onKeyDown={e=>e.key==="Enter"&&handleAuth()} style={{width:"100%",background:"#f4f9fc",border:"1.5px solid #cfe8f4",color:"#1e3a4a",borderRadius:10,padding:"10px 14px",fontSize:14,boxSizing:"border-box",outline:"none"}}/>
-          </div>
-          <button onClick={handleAuth} disabled={authLoading||!authEmail||!authPassword} style={{width:"100%",background:"linear-gradient(135deg,#4ab8e8,#2a8ec4)",color:"#fff",border:"none",borderRadius:12,padding:"13px 0",fontSize:15,fontWeight:800,cursor:"pointer",opacity:authLoading||!authEmail||!authPassword?0.6:1,boxShadow:"0 4px 14px rgba(74,184,232,0.4)"}}>
-            {authLoading?"処理中...":authMode==="login"?"ログイン":"アカウント作成"}
-          </button>
-        </div>
-      )}
-      <div style={{marginTop:28,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,width:"100%",maxWidth:380}}>
-        {[{icon:"🐂",label:"個体管理"},{icon:"🤖",label:"AI解析"},{icon:"📷",label:"書類OCR"},{icon:"📊",label:"収益管理"}].map(f=>(
-          <div key={f.label} style={{background:"#fff",borderRadius:12,padding:"10px 14px",border:"1px solid #cfe8f4",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:20}}>{f.icon}</span>
-            <span style={{color:"#1e3a4a",fontWeight:700,fontSize:12}}>{f.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  },[cattle, dbReady]);
 
   const makeEmptyNew = () => ({
     tag:"",name:"",sex:"去勢",breed:"黒毛和種",birthDate:"",
@@ -920,18 +829,12 @@ export default function App() {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap"}}>
           <span style={{background:`linear-gradient(135deg,${C.accent},${C.accentDark})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontSize:22,fontWeight:900,letterSpacing:2,fontFamily:"Georgia,serif"}}>WAGYU AI</span>
-          {settings.farmName&&(
-            <span style={{color:C.text,fontSize:14,fontWeight:700}}>{settings.farmName}</span>
-          )}
+          {settings.farmName&&<span style={{color:C.text,fontSize:14,fontWeight:700}}>{settings.farmName}</span>}
           {subtitle&&<span style={{color:C.textDim,fontSize:11}}>{subtitle}</span>}
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {!subtitle&&(
-            <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{background:C.cardSub,border:`1px solid ${C.border}`,color:C.textMid,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>⚙️</button>
-          )}
-          {/* ログアウト */}
-          <button onClick={()=>{ if(confirm("ログアウトしますか？")) window.signOut(); }} style={{background:C.cardSub,border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:14}}>🚪</button>
-        </div>
+        {!subtitle&&(
+          <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{background:C.cardSub,border:`1px solid ${C.border}`,color:C.textMid,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>⚙️</button>
+        )}
       </div>
     </div>
   );
