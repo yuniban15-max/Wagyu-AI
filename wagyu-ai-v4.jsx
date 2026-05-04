@@ -3495,6 +3495,13 @@ ${JSON.stringify(summary, null, 2)}
   };
 
   // ── NAV ITEMS ──────────────────────────────────────────────────────────────
+  const navItems=[
+    {id:"home",     icon:"🏠", label:"ホーム"},
+    {id:"schedule", icon:"📅", label:"出荷予定"},
+    {id:"ai",       icon:"🤖", label:"AI解析", isCenter:true},
+    {id:"genetics", icon:"🧬", label:"血統分析"},
+    {id:"detail",   icon:"🐂", label:"個体詳細", disabled:!selectedId},
+  ];
 
   // ページ別早期return
   if(page==="shipResult") return <ShipResultScreen/>;
@@ -3505,14 +3512,6 @@ ${JSON.stringify(summary, null, 2)}
       {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
     </div>
   );
-
-  const navItems=[
-    {id:"home",     icon:"🏠", label:"ホーム"},
-    {id:"schedule", icon:"📅", label:"出荷予定"},
-    {id:"ai",       icon:"🤖", label:"AI解析", isCenter:true},
-    {id:"genetics", icon:"🧬", label:"血統分析"},
-    {id:"detail",   icon:"🐂", label:"個体詳細", disabled:!selectedId},
-  ];
 
   return (
     <div style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto",position:"relative"}}>
