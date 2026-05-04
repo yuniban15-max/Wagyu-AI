@@ -671,9 +671,16 @@ export default function App() {
   const [addFormKey,   setAddFormKey]   = useState(0);
   const [editCosts,    setEditCosts]    = useState(false);
   const [tmpCosts,     setTmpCosts]     = useState(null);
-  const [settings,     setSettings]     = useState({
-    farmName: "",
-    defaultCosts:{ roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
+  const [settings,     setSettings]     = useState(()=>{
+    try {
+      const s = localStorage.getItem('wagyu_settings');
+      if(s) return JSON.parse(s);
+    } catch(e) {}
+    return {
+      farmName: "",
+      farmId: "farm_" + Math.random().toString(36).slice(2,8),
+      defaultCosts:{ roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
+    };
   });
   const [tmpSettings, setTmpSettings] = useState(null);
 
@@ -681,9 +688,11 @@ export default function App() {
   useEffect(()=>{
     const load = async () => {
       try {
-        if(typeof window.loadCattle === "function") {
-          const saved = await window.loadCattle();
-          if(saved && Array.isArray(saved) && saved.length > 0) setCattle(saved);
+        if(typeof window.loadAllCattle === "function") {
+          const saved = await window.loadAllCattle();
+          if(saved && Array.isArray(saved) && saved.length > 0) {
+            setCattle(saved);
+          }
         }
       } catch(e) { console.log("読み込みエラー:", e); }
       setDbReady(true);
@@ -691,13 +700,27 @@ export default function App() {
     load();
   },[]);
 
-  // ── 自動保存 ──────────────────────────────────────────────────────────────
+  // ── 1頭ずつ自動保存 ───────────────────────────────────────────────────────
+  const saveCowDebounced = useCallback((cow)=>{
+    if(typeof window.saveCow === "function") {
+      window.saveCow(cow).catch(e=>console.log("保存エラー:",e));
+    }
+  },[]);
+
+  // cattleが変わったら差分を保存
+  const prevCattleRef = useRef([]);
   useEffect(()=>{
     if(!dbReady) return;
+    const prev = prevCattleRef.current;
     const timer = setTimeout(()=>{
-      if(typeof window.saveCattle === "function")
-        window.saveCattle(cattle).catch(e=>console.log("保存エラー:",e));
-    }, 800);
+      cattle.forEach(cow => {
+        const old = prev.find(c=>c.id===cow.id);
+        if(!old || JSON.stringify(old) !== JSON.stringify(cow)) {
+          saveCowDebounced(cow);
+        }
+      });
+      prevCattleRef.current = cattle;
+    }, 1000);
     return ()=>clearTimeout(timer);
   },[cattle, dbReady]);
 
@@ -846,6 +869,7 @@ export default function App() {
     const setCost = (k,v) => setTmpSettings(p=>({...p,defaultCosts:{...p.defaultCosts,[k]:Number(v)||0}}));
     const save = () => {
       setSettings(tmpSettings);
+      try { localStorage.setItem('wagyu_settings', JSON.stringify(tmpSettings)); } catch(e) {}
       setShowSettings(false);
     };
     const compoundDaily = (tmpSettings.defaultCosts.compoundKgPerDay||0)*(tmpSettings.defaultCosts.compoundKgPrice||0);
@@ -869,14 +893,14 @@ export default function App() {
           <div style={{background:C.accentLight,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{color:C.accentDark,fontWeight:800,fontSize:13,marginBottom:10}}>🏡 農場情報</div>
             <FInput label="農場名">
-              <input
-                value={tmpSettings.farmName}
-                onChange={e=>set("farmName",e.target.value)}
-                placeholder="例: 田中和牛農場"
-                style={inp}
-              />
+              <input value={tmpSettings.farmName} onChange={e=>set("farmName",e.target.value)} placeholder="例: 田中和牛農場" style={inp}/>
             </FInput>
-            <div style={{color:C.textDim,fontSize:11}}>入力するとタイトル横に表示されます</div>
+            <FInput label="農場ID（複数スマホで同じIDにすると同じデータが見れます）">
+              <input value={tmpSettings.farmId||""} onChange={e=>set("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
+            </FInput>
+            <div style={{color:C.textDim,fontSize:11,marginTop:4}}>
+              ⚠️ IDを変えるとデータが見えなくなります。全スマホで同じIDにしてください。
+            </div>
           </div>
 
           {/* デフォルトコスト */}
@@ -1835,6 +1859,7 @@ export default function App() {
 
     const deleteCow = () => {
       setCattle(p=>p.filter(c=>c.id!==cow.id));
+      if(typeof window.deleteCowRemote === "function") window.deleteCowRemote(cow.id);
       setSelectedId(null);
       setPage("home");
     };
