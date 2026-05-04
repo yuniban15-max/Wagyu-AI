@@ -13,53 +13,70 @@
 <body style="margin:0;background:#f4f9fc">
 <div id="root"></div>
 <script>
-const { useState, useMemo, useRef, useEffect, useCallback } = React;
+try {
+  const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
-const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-
-';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
 
-window.saveCattle = async function(data) {
-  await sb.from('cattle_data').upsert({
-    user_id: 'default',
-    data: data,
-    updated_at: new Date().toISOString()
+  let sb = null;
+  try {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch(e) {
+    console.log('Supabase初期化エラー:', e);
+  }
+
+  window.saveCattle = async function(data) {
+    if(!sb) return;
+    try {
+      await sb.from('cattle_data').upsert({
+        user_id: 'default',
+        data: data,
+        updated_at: new Date().toISOString()
+      });
+    } catch(e) { console.log('保存エラー:', e); }
+  };
+
+  window.loadCattle = async function() {
+    if(!sb) return null;
+    try {
+      const { data } = await sb
+        .from('cattle_data')
+        .select('data')
+        .eq('user_id', 'default')
+        .single();
+      return data?.data || null;
+    } catch(e) { return null; }
+  };
+
+  async function main() {
+    const res = await fetch('./wagyu-ai-v4.jsx');
+    let code = await res.text();
+    code = code
+      .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
+      .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
+      .replace(/export default function App/g, 'window.App = function App');
+    const result = Babel.transform(code, { presets: ['react'] });
+    const fn = new Function(
+      'React','ReactDOM','XLSX',
+      'useState','useMemo','useRef','useEffect','useCallback',
+      result.code
+    );
+    fn(React,ReactDOM,XLSX,
+      useState,useMemo,useRef,useEffect,useCallback
+    );
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      React.createElement(window.App)
+    );
+  }
+
+  main().catch(e=>{
+    document.body.innerHTML='<div style="padding:20px;color:red;font-size:14px">エラー: '+e.message+'</div>';
   });
-};
 
-window.loadCattle = async function() {
-  const { data } = await sb
-    .from('cattle_data')
-    .select('data')
-    .eq('user_id', 'default')
-    .single();
-  return data?.data || null;
-};
-
-async function main() {
-  const res = await fetch('./wagyu-ai-v4.jsx');
-  let code = await res.text();
-  code = code
-    .replace(/import \* as XLSX from ['"]xlsx['"];?/g, '')
-    .replace(/import \{[^}]+\} from ['"]react['"];?/g, '')
-    .replace(/export default function App/g, 'window.App = function App');
-  const result = Babel.transform(code, { presets: ['react'] });
-  const fn = new Function(
-    'React','ReactDOM','XLSX',
-    'useState','useMemo','useRef','useEffect','useCallback',
-    result.code
-  );
-  fn(React,ReactDOM,XLSX,
-    useState,useMemo,useRef,useEffect,useCallback
-  );
-  ReactDOM.createRoot(document.getElementById('root')).render(
-    React.createElement(window.App)
-  );
+} catch(e) {
+  document.body.innerHTML='<div style="padding:20px;color:red;font-size:14px">初期化エラー: '+e.message+'</div>';
 }
-main().catch(e=>{
-  document.body.innerHTML='<div style="padding:20px;color:red">エラー: '+e.message+'</div>';
-});
 </script>
 </body>
 </html>
