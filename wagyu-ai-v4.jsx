@@ -847,7 +847,7 @@ export default function App() {
   };
 
   // ── APP HEADER ─────────────────────────────────────────────────────────────
-  const AppHeader = ({subtitle}) => (
+  const AppHeader = ({subtitle, showGear=false}) => (
     <div style={{background:"#fff",borderBottom:`1px solid ${C.border}`,padding:"12px 16px 10px",boxShadow:"0 1px 8px rgba(74,184,232,0.08)",position:"sticky",top:0,zIndex:80}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap"}}>
@@ -855,7 +855,7 @@ export default function App() {
           {settings.farmName&&<span style={{color:C.text,fontSize:14,fontWeight:700}}>{settings.farmName}</span>}
           {subtitle&&<span style={{color:C.textDim,fontSize:11}}>{subtitle}</span>}
         </div>
-        {!subtitle&&(
+        {(showGear||!subtitle)&&(
           <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{background:C.cardSub,border:`1px solid ${C.border}`,color:C.textMid,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>⚙️</button>
         )}
       </div>
@@ -991,7 +991,7 @@ export default function App() {
 
     return (
       <div style={{paddingBottom:90}}>
-        <AppHeader subtitle="和牛AI管理システム"/>
+        <AppHeader subtitle="和牛AI管理システム" showGear={true}/>
         <div style={{padding:"16px 16px"}}>
 
           {/* KPI 3行 */}
