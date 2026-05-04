@@ -298,17 +298,6 @@ function PedigreeForm({pedigree, onChange}) {
     obj[keys[keys.length-1]] = val;
     onChange(next);
   };
-  const PF = ({label,path,placeholder}) => (
-    <div style={{marginBottom:8}}>
-      <div style={{color:C.textDim,fontSize:10,marginBottom:3}}>{label}</div>
-<input value={get(pedigree,path)} 
-  onChange={e=>set(path,e.target.value)}
-  placeholder={label} 
-  style={{...inp,fontSize:12,padding:"7px 10px"}}/>
-        onChange={e=>set(path,e.target.value)}
-        placeholder={placeholder||label} style={{...inp,fontSize:12,padding:"7px 10px"}}/>
-    </div>
-  );
 
   // helper to read nested
   const get = (obj, path) => {
@@ -675,6 +664,49 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [showOcr, setShowOcr] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [dbReady, setDbReady] = useState(false); // DB読み込み完了フラグ
+  const [saving, setSaving] = useState(false);   // 保存中フラグ
+
+  // ── 起動時にSupabaseからデータ読み込み ──────────────────────────────────
+  useEffect(()=>{
+    const load = async () => {
+      try {
+        // loadCattleはindex.htmlでグローバルに定義
+        if(typeof loadCattle === "function") {
+          const saved = await loadCattle();
+          if(saved && Array.isArray(saved) && saved.length > 0) {
+            setCattle(saved);
+          }
+          if(saved?.settings) {
+            setSettings(saved.settings);
+          }
+        }
+      } catch(e) {
+        console.log("データ読み込みエラー:", e);
+      }
+      setDbReady(true);
+    };
+    load();
+  },[]);
+
+  // ── cattle変更時に自動保存 ────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!dbReady) return; // 初回読み込み前は保存しない
+    const save = async () => {
+      try {
+        if(typeof saveCattle === "function") {
+          setSaving(true);
+          await saveCattle(cattle);
+          setSaving(false);
+        }
+      } catch(e) {
+        console.log("保存エラー:", e);
+        setSaving(false);
+      }
+    };
+    const timer = setTimeout(save, 1000); // 1秒後に保存（連続更新を間引く）
+    return () => clearTimeout(timer);
+  },[cattle, dbReady]);
 
   // ── 農場設定 ──────────────────────────────────────────────────────────────
   const [settings, setSettings] = useState({
@@ -845,15 +877,24 @@ export default function App() {
           )}
           {subtitle&&<span style={{color:C.textDim,fontSize:11}}>{subtitle}</span>}
         </div>
-        {/* 設定ボタン（ホーム画面のみ表示） */}
-        {!subtitle&&(
-          <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{
-            background:C.cardSub, border:`1px solid ${C.border}`,
-            color:C.textMid, borderRadius:10, width:36, height:36,
-            display:"flex",alignItems:"center",justifyContent:"center",
-            cursor:"pointer", fontSize:17, flexShrink:0,
-          }}>⚙️</button>
-        )}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {/* 保存中インジケーター */}
+          {saving&&(
+            <span style={{color:C.green,fontSize:11,fontWeight:600}}>💾 保存中...</span>
+          )}
+          {!saving&&dbReady&&(
+            <span style={{color:C.textDim,fontSize:10}}>✓ 保存済</span>
+          )}
+          {/* 設定ボタン */}
+          {!subtitle&&(
+            <button onClick={()=>{setTmpSettings(JSON.parse(JSON.stringify(settings)));setShowSettings(true);}} style={{
+              background:C.cardSub, border:`1px solid ${C.border}`,
+              color:C.textMid, borderRadius:10, width:36, height:36,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              cursor:"pointer", fontSize:17, flexShrink:0,
+            }}>⚙️</button>
+          )}
+        </div>
       </div>
     </div>
   );
