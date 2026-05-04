@@ -9,38 +9,24 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script>
-const { useState, useMemo, useRef, useEffect, useCallback } = React;
-
-// Supabase初期化（Vercelの環境変数から取得できないのでここに直接書く）
-// ※公開キーなので問題なし
-const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// データ保存
-async function saveCattle(data) {
-  const { error } = await supabase
-    .from('cattle_data')
-    .upsert({ user_id: 'default', data: data, updated_at: new Date().toISOString() });
-  if (error) console.error('保存エラー:', error);
-}
-
-// データ読み込み
-async function loadCattle() {
-  const { data, error } = await supabase
-    .from('cattle_data')
-    .select('data')
-    .eq('user_id', 'default')
-    .single();
-  if (error) return null;
-  return data?.data;
-}
-</script>
 </head>
 <body style="margin:0;background:#f4f9fc">
 <div id="root"></div>
 <script>
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+const SUPABASE_URL = 'https://icfvocxiiclmcmjcdmzp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XrHVjSfQvJ3_9BzoFo911g_n78afVX-';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function saveCattle(data) {
+  await sb.from('cattle_data').upsert({ user_id:'default', data, updated_at: new Date().toISOString() });
+}
+async function loadCattle() {
+  const { data } = await sb.from('cattle_data').select('data').eq('user_id','default').single();
+  return data?.data || null;
+}
+
 async function main() {
   const res = await fetch('./wagyu-ai-v4.jsx');
   let code = await res.text();
@@ -52,15 +38,19 @@ async function main() {
   const fn = new Function(
     'React','ReactDOM','XLSX',
     'useState','useMemo','useRef','useEffect','useCallback',
+    'saveCattle','loadCattle',
     result.code
   );
-  fn(React, ReactDOM, XLSX, useState, useMemo, useRef, useEffect, useCallback);
+  fn(React,ReactDOM,XLSX,
+    useState,useMemo,useRef,useEffect,useCallback,
+    saveCattle,loadCattle
+  );
   ReactDOM.createRoot(document.getElementById('root')).render(
     React.createElement(window.App)
   );
 }
-main().catch(e => {
-  document.body.innerHTML = '<div style="padding:20px;color:red;font-size:14px">エラー: ' + e.message + '</div>';
+main().catch(e=>{
+  document.body.innerHTML='<div style="padding:20px;color:red">エラー: '+e.message+'</div>';
 });
 </script>
 </body>
