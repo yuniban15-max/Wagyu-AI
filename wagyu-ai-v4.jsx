@@ -1721,7 +1721,6 @@ export default function App() {
         </div>
       </div>
     );
-  };
     const [selBreeder, setSelBreeder] = useState(null);
     const [sortMode,   setSortMode]   = useState("head"); // head|dg|bms|profit
 
