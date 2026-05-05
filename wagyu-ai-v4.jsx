@@ -807,8 +807,8 @@ export default function App() {
   const buildLineageData = (level) => {
     const getKey = (c) => {
       if(level===1) return c.pedigree?.sire?.name;
-      if(level===2) return c.pedigree?.sire?.sire?.name;
-      if(level===3) return c.pedigree?.sire?.sire?.sire?.name;
+      if(level===2) return c.pedigree?.dam?.sire?.name;   // 母の父
+      if(level===3) return c.pedigree?.dam?.dam?.sire?.name; // 母の母の父
       return null;
     };
     const map={};
@@ -865,38 +865,30 @@ export default function App() {
   // ── 設定モーダル ────────────────────────────────────────────────────────────
   const SettingsModal = () => {
     if(!tmpSettings) return null;
-    // ローカルstateで管理（入力中に再描画させない）
-    const [localSettings, setLocalSettings] = React.useState(tmpSettings);
-    const setF = (k,v) => setLocalSettings(p=>({...p,[k]:v}));
-    const setCost = (k,v) => setLocalSettings(p=>({...p,defaultCosts:{...p.defaultCosts,[k]:Number(v)||0}}));
-    const compoundDaily = (localSettings.defaultCosts.compoundKgPerDay||0)*(localSettings.defaultCosts.compoundKgPrice||0);
-    const totalDaily = (localSettings.defaultCosts.roughageDaily||0)+compoundDaily+(localSettings.defaultCosts.otherDaily||0);
+    const [loc, setLoc] = React.useState(tmpSettings);
+    const sf = (k,v) => setLoc(p=>({...p,[k]:v}));
+    const sc = (k,v) => setLoc(p=>({...p,defaultCosts:{...p.defaultCosts,[k]:Number(v)||0}}));
+    const cd = (loc.defaultCosts.compoundKgPerDay||0)*(loc.defaultCosts.compoundKgPrice||0);
+    const td = (loc.defaultCosts.roughageDaily||0)+cd+(loc.defaultCosts.otherDaily||0);
     const save = () => {
-      setSettings(localSettings);
-      setTmpSettings(localSettings);
-      try { localStorage.setItem('wagyu_settings', JSON.stringify(localSettings)); } catch(e) {}
+      setSettings(loc); setTmpSettings(loc);
+      try { localStorage.setItem('wagyu_settings', JSON.stringify(loc)); } catch(e) {}
       setShowSettings(false);
     };
-    const NI = ({label,k,unit,hint,kk}) => (
+    const numRow = (label, val, onChange, unit, hint) => (
       <div style={{marginBottom:14}}>
         <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>{label}</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <input type="number"
-            value={kk ? (localSettings.defaultCosts[kk]||"") : (localSettings.defaultCosts[k]||"")}
-            onChange={e=> kk ? setCost(kk,e.target.value) : setCost(k,e.target.value)}
-            style={{...inp,flex:1}} placeholder="0"/>
+          <input type="number" value={val||""} onChange={onChange} style={{...inp,flex:1}} placeholder="0"/>
           {unit&&<span style={{color:C.textDim,fontSize:12,whiteSpace:"nowrap"}}>{unit}</span>}
         </div>
         {hint&&<div style={{color:C.textDim,fontSize:10,marginTop:3}}>{hint}</div>}
       </div>
     );
-
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(30,58,74,0.4)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(3px)"}}>
         <div style={{background:"#fff",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",padding:"8px 20px 40px",boxShadow:"0 -8px 40px rgba(74,184,232,0.18)"}}>
           <div style={{width:40,height:4,background:C.border,borderRadius:2,margin:"12px auto 18px"}}/>
-
-          {/* ヘッダー */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
             <div>
               <div style={{color:C.text,fontWeight:900,fontSize:17}}>⚙️ 農場設定</div>
@@ -905,50 +897,44 @@ export default function App() {
             <button onClick={()=>setShowSettings(false)} style={{background:C.accentLight,border:"none",color:C.textMid,width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
 
-          {/* 農場名 */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{color:C.accentDark,fontWeight:800,fontSize:13,marginBottom:10}}>🏡 農場情報</div>
             <div style={{marginBottom:14}}>
               <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>農場名</div>
-              <input value={localSettings.farmName} onChange={e=>setF("farmName",e.target.value)} placeholder="例: 田中和牛農場" style={inp}/>
+              <input value={loc.farmName} onChange={e=>sf("farmName",e.target.value)} placeholder="例: 田中和牛農場" style={inp}/>
             </div>
             <div style={{marginBottom:8}}>
               <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>農場ID（複数スマホで同じIDにすると同じデータが見れます）</div>
-              <input value={localSettings.farmId||""} onChange={e=>setF("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
+              <input value={loc.farmId||""} onChange={e=>sf("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
             </div>
-            <div style={{color:C.textDim,fontSize:11,marginTop:4}}>
-              ⚠️ IDを変えるとデータが見えなくなります。全スマホで同じIDにしてください。
-            </div>
+            <div style={{color:C.textDim,fontSize:11}}>⚠️ 全スマホで同じIDにしてください</div>
           </div>
 
-          {/* デフォルトコスト */}
           <div style={{background:C.greenLight,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.green}22`}}>
-            <div style={{color:C.green,fontWeight:800,fontSize:13,marginBottom:12}}>🌾 基本飼養コスト（新規導入時のデフォルト）</div>
-            <NI label="粗飼料費（円/日）" k="roughageDaily" unit="円/日" hint="牧草・稲わらなど"/>
+            <div style={{color:C.green,fontWeight:800,fontSize:13,marginBottom:12}}>🌾 基本飼養コスト</div>
+            {numRow("粗飼料費（円/日）", loc.defaultCosts.roughageDaily, e=>sc("roughageDaily",e.target.value), "円/日", "牧草・稲わらなど")}
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginBottom:10}}>
               <div style={{color:C.textMid,fontSize:12,fontWeight:700,marginBottom:8}}>配合飼料</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <NI label="給与量（kg/日）" k="compoundKgPerDay" unit="kg/日"/>
-                <NI label="単価（円/kg）" k="compoundKgPrice" unit="円/kg"/>
+                {numRow("給与量（kg/日）", loc.defaultCosts.compoundKgPerDay, e=>sc("compoundKgPerDay",e.target.value), "kg")}
+                {numRow("単価（円/kg）",   loc.defaultCosts.compoundKgPrice,   e=>sc("compoundKgPrice",e.target.value),   "円")}
               </div>
               <div style={{background:"#fff",borderRadius:8,padding:"8px 12px",fontSize:12,color:C.green,fontWeight:700}}>
-                配合コスト: ¥{compoundDaily.toLocaleString()}/日
+                配合コスト: ¥{cd.toLocaleString()}/日
               </div>
             </div>
-            <NI label="その他日常経費（円/日）" k="otherDaily" unit="円/日" hint="光熱費・消耗品など"/>
+            {numRow("その他日常経費（円/日）", loc.defaultCosts.otherDaily, e=>sc("otherDaily",e.target.value), "円/日", "光熱費など")}
             <div style={{background:"#fff",border:`1.5px solid ${C.green}44`,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{color:C.textMid,fontSize:13}}>飼養コスト合計</span>
-              <span style={{color:C.green,fontWeight:900,fontSize:18}}>¥{totalDaily.toLocaleString()}<span style={{fontSize:11,fontWeight:400}}>/日</span></span>
+              <span style={{color:C.green,fontWeight:900,fontSize:18}}>¥{td.toLocaleString()}<span style={{fontSize:11,fontWeight:400}}>/日</span></span>
             </div>
           </div>
 
-          {/* 固定経費 */}
           <div style={{background:C.amberLight,borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1px solid ${C.amber}22`}}>
             <div style={{color:C.amber,fontWeight:800,fontSize:13,marginBottom:10}}>🏗️ 固定経費（通期）</div>
-            <NI label="固定経費（円）" k="fixedOther" unit="円" hint="施設費・減価償却など"/>
+            {numRow("固定経費（円）", loc.defaultCosts.fixedOther, e=>sc("fixedOther",e.target.value), "円", "施設費・減価償却など")}
           </div>
 
-          {/* 保存 */}
           <Btn full onClick={save}>設定を保存する</Btn>
         </div>
       </div>
@@ -1222,16 +1208,18 @@ export default function App() {
 
                 {/* 出荷済み：成績サマリー */}
                 {shipped&&c.result&&(
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:5,marginBottom:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginBottom:8}}>
                     {[
-                      {label:"等級",  val:c.result.grade,   color: c.result.grade?.startsWith("A5")?"#d04020":c.result.grade?.startsWith("A4")?C.amber:C.green},
-                      {label:"BMS",   val:c.result.bms,     color:C.red},
-                      {label:"販売額",val:fmtM(c.result.sellPrice), color:C.amber},
-                      {label:"実績DG",val:c.result.dg?`${c.result.dg}`:null, color:C.accentDark},
+                      {label:"等級",     val:c.result.grade,                                    color: c.result.grade?.startsWith("A5")?"#d04020":c.result.grade?.startsWith("A4")?C.amber:C.green},
+                      {label:"BMS",      val:c.result.bms!=null?`${c.result.bms}`:null,          color:C.red},
+                      {label:"販売額",   val:fmtM(c.result.sellPrice),                          color:C.amber},
+                      {label:"枝肉重量", val:c.result.coldWeight?`${c.result.coldWeight}kg`:null, color:C.accentDark},
+                      {label:"枝肉DG",  val:c.result.dg?`${c.result.dg}kg/日`:null,             color:C.green},
+                      {label:"歩留",     val:c.result.yieldGrade||null,                          color:C.purple},
                     ].map(({label,val,color})=>(
                       <div key={label} style={{background:C.cardSub,borderRadius:8,padding:"5px 8px"}}>
                         <div style={{color:C.textDim,fontSize:9,marginBottom:1}}>{label}</div>
-                        <div style={{color:val!=null?color:C.textDim,fontSize:12,fontWeight:700}}>{val??  "―"}</div>
+                        <div style={{color:val!=null?color:C.textDim,fontSize:12,fontWeight:700}}>{val??"―"}</div>
                       </div>
                     ))}
                   </div>
@@ -1566,9 +1554,9 @@ export default function App() {
 
     const data = useMemo(()=>buildLineageData(genLevel),[genLevel]);
 
-    const levelLabel = genLevel===1?"父（一代祖）":genLevel===2?"父の父（二代祖）":"父の父の父（三代祖）";
+    const levelLabel = genLevel===1?"父（一代祖）":genLevel===2?"母の父（二代祖）":"母の母の父（三代祖）";
     const levelColor = genLevel===1?C.purple:genLevel===2?"#7b5ea7":"#5a3e8a";
-    const levelDesc  = genLevel===1?"父牛別":genLevel===2?"祖父牛別":"曾祖父牛別";
+    const levelDesc  = genLevel===1?"父牛別":genLevel===2?"母の父別":"母の母の父別";
 
     const AncestorCard = ({s, open, onToggle}) => (
       <div style={{marginBottom:10}}>
@@ -1630,9 +1618,9 @@ export default function App() {
                     </div>
                     {/* 三世代血統ミニ表示 */}
                     <div style={{background:C.cardSub,borderRadius:8,padding:"7px 10px",marginBottom:8,fontSize:10,lineHeight:1.9}}>
-                      <div><span style={{color:C.textDim,minWidth:60,display:"inline-block"}}>父</span><b style={{color:C.purple}}>{c.pedigree?.sire?.name||"―"}</b></div>
-                      <div><span style={{color:C.textDim,minWidth:60,display:"inline-block"}}>父の父</span>{c.pedigree?.sire?.sire?.name||"―"}</div>
-                      <div><span style={{color:C.textDim,minWidth:60,display:"inline-block"}}>父の父の父</span>{c.pedigree?.sire?.sire?.sire?.name||"―"}</div>
+                      <div><span style={{color:C.textDim,minWidth:70,display:"inline-block"}}>父</span><b style={{color:C.purple}}>{c.pedigree?.sire?.name||"―"}</b></div>
+                      <div><span style={{color:C.textDim,minWidth:70,display:"inline-block"}}>母の父</span>{c.pedigree?.dam?.sire?.name||"―"}</div>
+                      <div><span style={{color:C.textDim,minWidth:70,display:"inline-block"}}>母の母の父</span>{c.pedigree?.dam?.dam?.sire?.name||"―"}</div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
                       {[{label:"DG",val:dg_c?`${dg_c.toFixed(2)}`:null,color:C.accent},{label:"BMS",val:c.result?.bms??null,color:C.red},{label:"ロース芯",val:c.result?.loinArea?`${c.result.loinArea}cm²`:null,color:C.accentDark}].map(({label,val,color})=>(
@@ -1670,8 +1658,8 @@ export default function App() {
         }}>
           {[
             {level:1, label:"一代祖", sub:"父"},
-            {level:2, label:"二代祖", sub:"父の父"},
-            {level:3, label:"三代祖", sub:"父の父の父"},
+            {level:2, label:"二代祖", sub:"母の父"},
+            {level:3, label:"三代祖", sub:"母の母の父"},
           ].map(({level,label,sub})=>(
             <button key={level} onClick={()=>{setGenLevel(level);setSelSire(null);}} style={{
               flex:1,
