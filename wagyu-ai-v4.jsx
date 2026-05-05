@@ -94,7 +94,7 @@ const daysUntil = (d) => d ? Math.ceil((new Date(d)-Date.now())/86400000) : null
 const calcAge = (b) => {
   if(!b) return "―";
   const m = Math.floor((Date.now()-new Date(b))/(30.44*86400000));
-  return m>=12 ? `${Math.floor(m/12)}歳${m%12}ヶ月` : `${m}ヶ月`;
+  return `${m}ヶ月`;
 };
 const latestWeight = (ws) => ws?.length ? ws[ws.length-1].weight : null;
 const calcDG = (ws) => {
@@ -1196,23 +1196,30 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 父血統 */}
-                {c.pedigree?.sire?.name&&(
-                  <div style={{fontSize:11,color:C.textDim,marginBottom:8,display:"flex",alignItems:"center",gap:4}}>
-                    <span>🐂</span>
-                    <span style={{fontWeight:600,color:C.purple}}>{c.pedigree.sire.name}</span>
-                    {c.pedigree.sire.sire?.name&&<span style={{color:C.textDim}}> ／ {c.pedigree.sire.sire.name}</span>}
-                    {ageStr!=="―"&&<span style={{marginLeft:"auto",color:C.textDim}}>{ageStr}</span>}
+                {/* 血統（父・母の父・母の母の父）*/}
+                <div style={{background:C.cardSub,borderRadius:10,padding:"7px 10px",marginBottom:8,fontSize:10,lineHeight:1.9}}>
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    <span style={{color:C.textDim,width:52,flexShrink:0}}>父</span>
+                    <span style={{fontWeight:700,color:C.purple}}>{c.pedigree?.sire?.name||"―"}</span>
+                    {ageStr!=="―"&&<span style={{color:C.textDim,marginLeft:"auto"}}>{ageStr}</span>}
                   </div>
-                )}
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    <span style={{color:C.textDim,width:52,flexShrink:0}}>母の父</span>
+                    <span style={{color:C.text}}>{c.pedigree?.dam?.sire?.name||"―"}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    <span style={{color:C.textDim,width:52,flexShrink:0}}>母母父</span>
+                    <span style={{color:C.text}}>{c.pedigree?.dam?.dam?.sire?.name||"―"}</span>
+                  </div>
+                </div>
 
-                {/* 肥育中：体重・DG・牛舎 */}
+                {/* 肥育中：体重・DG・導入金額 */}
                 {!shipped&&(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
                     {[
                       ["⚖️ 最新体重", lw?`${lw}kg`:"未計測"],
                       ["📈 DG",       dg_c?`+${dg_c.toFixed(2)}`:"―"],
-                      ["📦 導入体重", introW?`${introW}kg`:"―"],
+                      ["💴 導入金額", c.costs?.purchasePrice?fmtM(c.costs.purchasePrice):"―"],
                     ].map(([k,v])=>(
                       <div key={k} style={{background:C.cardSub,borderRadius:10,padding:"6px 10px"}}>
                         <div style={{color:C.textDim,fontSize:9,marginBottom:2}}>{k}</div>
@@ -1604,7 +1611,7 @@ export default function App() {
 
     return (
       <div style={{paddingBottom:90}}>
-        <AppHeader subtitle="繁殖農家別分析"/>
+        <AppHeader subtitle="繁殖農家分析"/>
         <div style={{padding:"16px 16px"}}>
 
           {/* 導入元フィルター */}
@@ -1865,7 +1872,7 @@ export default function App() {
         </div>
 
         {/* 並び替え */}
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:12,scrollbarWidth:"none"}}>
+          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,paddingLeft:16,paddingRight:16,marginBottom:12,scrollbarWidth:"none",justifyContent:"flex-end"}}>
             {[
               {key:"head",   label:"🐂 頭数"},
               {key:"dg",     label:"📈 DG"},
