@@ -2098,34 +2098,113 @@ export default function App() {
       {/* ── 編集モーダル ── */}
       {showEdit&&editForm&&(
         <Modal title="✏️ 個体情報を編集" onClose={()=>setShowEdit(false)}>
-          {[
-            {label:"耳標番号",k:"tag",type:"text",ph:"例: 宮崎-0099"},
-            {label:"名前",k:"name",type:"text",ph:"例: 黒王"},
-            {label:"生年月日",k:"birthDate",type:"date"},
-            {label:"導入日",k:"introDate",type:"date"},
-            {label:"導入元市場",k:"farm",type:"text",ph:"例: 宮崎中央市場"},
-            {label:"牛舎・ペン",k:"pen",type:"text",ph:"例: 2号棟A"},
-            {label:"出荷予定日",k:"shippingPlan",type:"date"},
-            {label:"予想販売価格（円）",k:"expectedPrice",type:"number"},
-          ].map(({label,k,type,ph})=>(
-            <FInput key={k} label={label}>
-              <input type={type} placeholder={ph||""} value={editForm[k]||""}
-                onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))} style={inp}/>
-            </FInput>
-          ))}
-          <FInput label="性別">
-            <select value={editForm.sex} onChange={e=>setEditForm(p=>({...p,sex:e.target.value}))} style={inp}>
-              {["去勢","雌","雄"].map(o=><option key={o}>{o}</option>)}
-            </select>
-          </FInput>
-          <FInput label="品種">
-            <select value={editForm.breed} onChange={e=>setEditForm(p=>({...p,breed:e.target.value}))} style={inp}>
-              {["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"].map(o=><option key={o}>{o}</option>)}
-            </select>
-          </FInput>
-          <FInput label="メモ">
-            <textarea value={editForm.memo} onChange={e=>setEditForm(p=>({...p,memo:e.target.value}))} style={{...inp,height:60,resize:"vertical"}}/>
-          </FInput>
+          {/* タブ */}
+          <div style={{display:"flex",gap:6,marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:10}}>
+            {[["basic","📋 基本"],["pedigree","🧬 血統"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setDetailTab(k)} style={{
+                background:detailTab===k?`linear-gradient(135deg,${C.accent},${C.accentDark})`:"transparent",
+                color:detailTab===k?"#fff":C.textMid,
+                border:`1px solid ${detailTab===k?C.accent:C.border}`,
+                borderRadius:20,padding:"6px 16px",fontSize:12,fontWeight:700,cursor:"pointer",
+              }}>{l}</button>
+            ))}
+          </div>
+
+          {/* 基本情報タブ */}
+          {detailTab!=="pedigree"&&(
+            <>
+              {[
+                {label:"耳標番号",k:"tag",type:"text",ph:"例: 宮崎-0099"},
+                {label:"名前",k:"name",type:"text",ph:"例: 黒王"},
+                {label:"生年月日",k:"birthDate",type:"date"},
+                {label:"導入日",k:"introDate",type:"date"},
+                {label:"導入元市場",k:"farm",type:"text",ph:"例: 宮崎中央市場"},
+                {label:"牛舎・ペン",k:"pen",type:"text",ph:"例: 2号棟A"},
+                {label:"出荷予定日",k:"shippingPlan",type:"date"},
+                {label:"予想販売価格（円）",k:"expectedPrice",type:"number"},
+              ].map(({label,k,type,ph})=>(
+                <FInput key={k} label={label}>
+                  <input type={type} placeholder={ph||""} value={editForm[k]||""}
+                    onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))} style={inp}/>
+                </FInput>
+              ))}
+              <FInput label="性別">
+                <select value={editForm.sex} onChange={e=>setEditForm(p=>({...p,sex:e.target.value}))} style={inp}>
+                  {["去勢","雌","雄"].map(o=><option key={o}>{o}</option>)}
+                </select>
+              </FInput>
+              <FInput label="品種">
+                <select value={editForm.breed} onChange={e=>setEditForm(p=>({...p,breed:e.target.value}))} style={inp}>
+                  {["黒毛和種","褐毛和種","日本短角種","無角和種","交雑種"].map(o=><option key={o}>{o}</option>)}
+                </select>
+              </FInput>
+              <FInput label="メモ">
+                <textarea value={editForm.memo} onChange={e=>setEditForm(p=>({...p,memo:e.target.value}))} style={{...inp,height:60,resize:"vertical"}}/>
+              </FInput>
+            </>
+          )}
+
+          {/* 血統タブ */}
+          {detailTab==="pedigree"&&(
+            <>
+              {/* 父系 */}
+              <div style={{background:`${C.purple}11`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+                <div style={{color:C.purple,fontWeight:700,fontSize:12,marginBottom:10}}>🐂 父系</div>
+                {[
+                  {label:"父",     path:"sire.name"},
+                  {label:"父の父", path:"sire.sire.name"},
+                  {label:"父の母", path:"sire.dam.name"},
+                ].map(({label,path})=>{
+                  const keys=path.split(".");
+                  const getV=(obj,ks)=>ks.reduce((o,k)=>o?.[k],obj)||"";
+                  const setV=(obj,ks,v)=>{
+                    const n=JSON.parse(JSON.stringify(obj));
+                    let o=n;
+                    for(let i=0;i<ks.length-1;i++){
+                      if(!o[ks[i]])o[ks[i]]={name:"",sire:{name:""},dam:{name:""}};
+                      o=o[ks[i]];
+                    }
+                    o[ks[ks.length-1]]=v;
+                    return n;
+                  };
+                  return (
+                    <FInput key={label} label={label}>
+                      <input value={getV(editForm.pedigree,keys)} onChange={e=>setEditForm(p=>({...p,pedigree:setV(p.pedigree,keys,e.target.value)}))} placeholder={label} style={inp}/>
+                    </FInput>
+                  );
+                })}
+              </div>
+              {/* 母系 */}
+              <div style={{background:"#ffebf488",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+                <div style={{color:"#c0407a",fontWeight:700,fontSize:12,marginBottom:10}}>🐄 母系</div>
+                {[
+                  {label:"母",       path:"dam.name"},
+                  {label:"母の父",   path:"dam.sire.name"},
+                  {label:"母の母",   path:"dam.dam.name"},
+                  {label:"母の母の父",path:"dam.dam.sire.name"},
+                ].map(({label,path})=>{
+                  const keys=path.split(".");
+                  const getV=(obj,ks)=>ks.reduce((o,k)=>o?.[k],obj)||"";
+                  const setV=(obj,ks,v)=>{
+                    const n=JSON.parse(JSON.stringify(obj));
+                    let o=n;
+                    for(let i=0;i<ks.length-1;i++){
+                      if(!o[ks[i]])o[ks[i]]={name:"",sire:{name:"",sire:{name:""},dam:{name:""}},dam:{name:"",sire:{name:""},dam:{name:""}}};
+                      o=o[ks[i]];
+                    }
+                    o[ks[ks.length-1]]=v;
+                    return n;
+                  };
+                  return (
+                    <FInput key={label} label={label}>
+                      <input value={getV(editForm.pedigree,keys)} onChange={e=>setEditForm(p=>({...p,pedigree:setV(p.pedigree,keys,e.target.value)}))} placeholder={label} style={inp}/>
+                    </FInput>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           <Btn full onClick={saveEdit}>保存する</Btn>
         </Modal>
       )}
