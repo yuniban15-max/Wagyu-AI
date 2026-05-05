@@ -3906,8 +3906,8 @@ ${JSON.stringify(summary, null, 2)}
   ];
 
   // ページ別早期return
-  if(page==="shipResult") return <ShipResultScreen/>;
-  if(page==="intake")     return <IntakeScreen/>;
+  if(page==="shipResult") return React.createElement(ShipResultScreen);
+  if(page==="intake")     return React.createElement(IntakeScreen);
   if(page==="add") return (
     <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
       <AddScreen/>
