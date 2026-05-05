@@ -289,22 +289,18 @@ function PedigreeTree({pedigree}) {
 }
 
 // ── 耳標番号表示（6〜9文字目を大きく太字） ────────────────────────────────
-const TagDisplay = ({tag, size=14, highlightSize=18, color="#4ab8e8"}) => {
+const TagDisplay = ({tag, size=14, highlightSize=22, color="#4ab8e8"}) => {
   if(!tag) return null;
   const digits = tag.replace(/[^0-9]/g,"");
   if(digits.length < 9) return <span style={{color,fontWeight:900,fontSize:size,fontFamily:"monospace"}}>{tag}</span>;
-  const before  = tag.slice(0, tag.length - (10 - 5));      // 1〜5文字目部分
-  const mid     = tag.slice(tag.indexOf(digits[5]), tag.indexOf(digits[5]) + 4); // 6〜9文字目
-  const after   = tag.slice(tag.indexOf(digits[5]) + 4);    // 10文字目以降
-  // シンプルに数字の位置で分割
   const d = digits;
   const pre  = d.slice(0,5);
   const hi   = d.slice(5,9);
   const post = d.slice(9);
   return (
-    <span style={{fontFamily:"monospace"}}>
+    <span style={{fontFamily:"monospace",display:"inline-flex",alignItems:"baseline",gap:1}}>
       <span style={{color,fontWeight:700,fontSize:size}}>{pre}</span>
-      <span style={{color,fontWeight:900,fontSize:highlightSize}}>{hi}</span>
+      <span style={{color,fontWeight:900,fontSize:highlightSize,letterSpacing:1}}>{hi}</span>
       <span style={{color,fontWeight:700,fontSize:size}}>{post}</span>
     </span>
   );
@@ -1567,6 +1563,139 @@ export default function App() {
     );
   };
 
+  // ── 繁殖農家分析ページ ────────────────────────────────────────────────────
+  const BreederScreen = () => {
+    const [selBreeder, setSelBreeder] = useState(null);
+
+    const breederData = useMemo(()=>{
+      const map = {};
+      cattle.forEach(c=>{
+        const key = c.name || "不明";
+        if(!map[key]) map[key]={breeder:key, head:0, dgs:[], bmsList:[], loinList:[], profits:[], cows:[]};
+        map[key].head++;
+        const d = calcDG(c.weights); if(d) map[key].dgs.push(d);
+        if(c.result?.bms)      map[key].bmsList.push(c.result.bms);
+        if(c.result?.loinArea) map[key].loinList.push(c.result.loinArea);
+        const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
+        map[key].cows.push(c);
+      });
+      return Object.values(map)
+        .map(s=>({...s, avgDG:avg(s.dgs), avgBMS:avg(s.bmsList), avgLoin:avg(s.loinList), avgProfit:avg(s.profits)}))
+        .sort((a,b)=>b.head-a.head);
+    },[cattle]);
+
+    const bc = "#e06040"; // 繁殖農家カラー
+
+    return (
+      <div style={{paddingBottom:90}}>
+        <AppHeader subtitle="繁殖農家別分析"/>
+        <div style={{padding:"16px 16px"}}>
+
+          {/* サマリー */}
+          <div style={{background:`linear-gradient(135deg,${bc}18,${C.amberLight})`,borderRadius:14,padding:"12px 16px",marginBottom:16,border:`1px solid ${bc}22`}}>
+            <div style={{color:bc,fontWeight:700,fontSize:13,marginBottom:3}}>🏡 繁殖農家別分析</div>
+            <div style={{color:C.textMid,fontSize:12}}>{breederData.length}農家 / {cattle.length}頭　個体が増えるほど精度が上がります</div>
+          </div>
+
+          {breederData.map(s=>{
+            const open = selBreeder===s.breeder;
+            return (
+              <div key={s.breeder} style={{marginBottom:10}}>
+                <div onClick={()=>setSelBreeder(open?null:s.breeder)} style={{
+                  background: open?`${bc}14`:"#fff",
+                  border:`1.5px solid ${open?bc:C.border}`,
+                  borderRadius:16, padding:"14px 16px", cursor:"pointer",
+                  boxShadow: open?`0 4px 20px ${bc}22`:C.shadow,
+                }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:open?bc:C.cardSub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏡</div>
+                      <div>
+                        <div style={{color:open?bc:C.text,fontWeight:900,fontSize:15}}>{s.breeder}</div>
+                        <div style={{color:C.textDim,fontSize:11}}>導入 {s.head}頭</div>
+                      </div>
+                    </div>
+                    <span style={{color:C.textDim,fontSize:16}}>{open?"▲":"▼"}</span>
+                  </div>
+
+                  {/* 成績グリッド */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {[
+                      {label:"平均DG",   val:s.avgDG   ?`${s.avgDG.toFixed(2)} kg/日`:null, color:C.accent,  bg:C.accentLight},
+                      {label:"平均BMS",  val:s.avgBMS  ?`${s.avgBMS.toFixed(1)}`:null,       color:C.red,     bg:C.redLight},
+                      {label:"ロース芯", val:s.avgLoin ?`${s.avgLoin.toFixed(1)} cm²`:null,  color:C.accentDark,bg:C.accentLight},
+                      {label:"平均損益", val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(s.avgProfit):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
+                    ].map(({label,val,color,bg})=>(
+                      <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
+                        <div style={{color:C.textDim,fontSize:9,marginBottom:3}}>{label}</div>
+                        <div style={{color:val?color:C.textDim,fontSize:13,fontWeight:700}}>{val||"データなし"}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 展開：個体一覧 */}
+                  {open&&(
+                    <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+                      {s.cows.map(c=>{
+                        const dg_c = calcDG(c.weights);
+                        return (
+                          <div key={c.id} onClick={e=>{e.stopPropagation();goDetail(c.id);}} style={{
+                            background:"#fff",border:`1px solid ${C.border}`,
+                            borderRadius:14,padding:"12px 14px",marginBottom:8,
+                            cursor:"pointer",boxShadow:C.shadow,
+                          }}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                                <TagDisplay tag={c.tag} size={11} highlightSize={15} color={C.accent}/>
+                                {c.status==="出荷済"&&<Tag label="出荷済" color={C.textDim} bg="#efefef"/>}
+                              </div>
+                              <Tag label={c.sex} color={c.sex==="雌"?"#e06090":C.purple}/>
+                            </div>
+                            {/* 父血統 */}
+                            {c.pedigree?.sire?.name&&(
+                              <div style={{fontSize:11,color:C.textDim,marginBottom:8}}>
+                                🐂 父: <b style={{color:C.purple}}>{c.pedigree.sire.name}</b>
+                                {c.pedigree?.dam?.sire?.name&&<span>　母の父: {c.pedigree.dam.sire.name}</span>}
+                              </div>
+                            )}
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                              {[
+                                {label:"DG",     val:dg_c?`${dg_c.toFixed(2)}`:null, color:C.accent},
+                                {label:"BMS",    val:c.result?.bms??null,             color:C.red},
+                                {label:"枝肉DG", val:c.result?.dg?`${c.result.dg}`:null, color:C.green},
+                              ].map(({label,val,color})=>(
+                                <div key={label} style={{background:C.cardSub,borderRadius:8,padding:"5px 8px"}}>
+                                  <div style={{color:C.textDim,fontSize:9}}>{label}</div>
+                                  <div style={{color:val!=null?color:C.textDim,fontSize:12,fontWeight:700}}>{val??"―"}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {c.result&&(
+                              <div style={{marginTop:8,background:C.amberLight,borderRadius:8,padding:"6px 10px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                                <Tag label={c.result.grade} color={C.amber}/>
+                                <span style={{color:C.amber,fontSize:12,fontWeight:700}}>{fmtMoney(c.result.sellPrice)}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {breederData.length===0&&(
+            <div style={{textAlign:"center",padding:32,color:C.textDim,fontSize:13}}>
+              繁殖農家のデータがありません
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── GENETICS ───────────────────────────────────────────────────────────────
   const GeneticsScreen = () => {
     const [genLevel, setGenLevel] = useState(1);   // 1=一代祖, 2=二代祖, 3=三代祖
@@ -2135,7 +2264,7 @@ export default function App() {
             <>
               {[
                 {label:"耳標番号",k:"tag",type:"text",ph:"例: 宮崎-0099"},
-                {label:"名前",k:"name",type:"text",ph:"例: 黒王"},
+                {label:"繁殖農家",k:"name",type:"text",ph:"例: 黒王"},
                 {label:"生年月日",k:"birthDate",type:"date"},
                 {label:"導入日",k:"introDate",type:"date"},
                 {label:"導入元市場",k:"farm",type:"text",ph:"例: 宮崎中央市場"},
@@ -3546,8 +3675,8 @@ ${JSON.stringify(summary, null, 2)}
     {id:"home",     icon:"🏠", label:"ホーム"},
     {id:"schedule", icon:"📅", label:"出荷予定"},
     {id:"ai",       icon:"🤖", label:"AI解析", isCenter:true},
+    {id:"breeder",  icon:"🏡", label:"繁殖農家"},
     {id:"genetics", icon:"🧬", label:"血統分析"},
-    {id:"detail",   icon:"🐂", label:"個体詳細", disabled:!selectedId},
   ];
 
   // ページ別早期return
@@ -3566,6 +3695,7 @@ ${JSON.stringify(summary, null, 2)}
       {page==="alerts"   && <AlertsScreen/>}
       {page==="schedule" && <ScheduleScreen/>}
       {page==="ai"       && <AiScreen/>}
+      {page==="breeder"  && <BreederScreen/>}
       {page==="genetics" && <GeneticsScreen/>}
       {page==="detail"   && <DetailScreen/>}
 
