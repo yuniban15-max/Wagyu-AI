@@ -1566,11 +1566,12 @@ export default function App() {
   // ── 繁殖農家分析ページ ────────────────────────────────────────────────────
   const BreederScreen = () => {
     const [selBreeder, setSelBreeder] = useState(null);
+    const [sortMode,   setSortMode]   = useState("head"); // head|dg|bms|profit
 
     const breederData = useMemo(()=>{
       const map = {};
       cattle.forEach(c=>{
-        const key = c.name || "不明";
+        const key = c.farm || "不明";
         if(!map[key]) map[key]={breeder:key, head:0, dgs:[], bmsList:[], loinList:[], profits:[], cows:[]};
         map[key].head++;
         const d = calcDG(c.weights); if(d) map[key].dgs.push(d);
@@ -1579,25 +1580,55 @@ export default function App() {
         const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
         map[key].cows.push(c);
       });
-      return Object.values(map)
-        .map(s=>({...s, avgDG:avg(s.dgs), avgBMS:avg(s.bmsList), avgLoin:avg(s.loinList), avgProfit:avg(s.profits)}))
-        .sort((a,b)=>b.head-a.head);
-    },[cattle]);
+      const list = Object.values(map).map(s=>({
+        ...s,
+        avgDG:     avg(s.dgs),
+        avgBMS:    avg(s.bmsList),
+        avgLoin:   avg(s.loinList),
+        avgProfit: avg(s.profits),
+      }));
+      return list.sort((a,b)=>{
+        if(sortMode==="head")   return b.head - a.head;
+        if(sortMode==="dg")     return (b.avgDG??-Infinity) - (a.avgDG??-Infinity);
+        if(sortMode==="bms")    return (b.avgBMS??-Infinity) - (a.avgBMS??-Infinity);
+        if(sortMode==="profit") return (b.avgProfit??-Infinity) - (a.avgProfit??-Infinity);
+        return 0;
+      });
+    },[cattle, sortMode]);
 
-    const bc = "#e06040"; // 繁殖農家カラー
+    const bc = "#e06040";
 
     return (
       <div style={{paddingBottom:90}}>
-        <AppHeader subtitle="繁殖農家別分析"/>
+        <AppHeader subtitle="導入元・繁殖農家分析"/>
         <div style={{padding:"16px 16px"}}>
 
           {/* サマリー */}
-          <div style={{background:`linear-gradient(135deg,${bc}18,${C.amberLight})`,borderRadius:14,padding:"12px 16px",marginBottom:16,border:`1px solid ${bc}22`}}>
-            <div style={{color:bc,fontWeight:700,fontSize:13,marginBottom:3}}>🏡 繁殖農家別分析</div>
-            <div style={{color:C.textMid,fontSize:12}}>{breederData.length}農家 / {cattle.length}頭　個体が増えるほど精度が上がります</div>
+          <div style={{background:`linear-gradient(135deg,${bc}18,${C.amberLight})`,borderRadius:14,padding:"12px 16px",marginBottom:12,border:`1px solid ${bc}22`}}>
+            <div style={{color:bc,fontWeight:700,fontSize:13,marginBottom:3}}>🏡 導入元（家畜市場）別分析</div>
+            <div style={{color:C.textMid,fontSize:12}}>{breederData.length}市場・農家 / {cattle.length}頭</div>
           </div>
 
-          {breederData.map(s=>{
+          {/* 並び替え */}
+          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:14,scrollbarWidth:"none"}}>
+            {[
+              {key:"head",   label:"🐂 頭数"},
+              {key:"dg",     label:"📈 DG"},
+              {key:"bms",    label:"🥩 BMS"},
+              {key:"profit", label:"💴 損益"},
+            ].map(({key,label})=>(
+              <button key={key} onClick={()=>setSortMode(key)} style={{
+                background: sortMode===key?`linear-gradient(135deg,${bc},#c04020)`:"#fff",
+                color:       sortMode===key?"#fff":C.textMid,
+                border:`1.5px solid ${sortMode===key?bc:C.border}`,
+                borderRadius:20, padding:"6px 14px",
+                fontSize:11, fontWeight:700, cursor:"pointer",
+                whiteSpace:"nowrap", flexShrink:0,
+              }}>{label}</button>
+            ))}
+          </div>
+
+          {breederData.map((s,idx)=>{
             const open = selBreeder===s.breeder;
             return (
               <div key={s.breeder} style={{marginBottom:10}}>
@@ -1609,10 +1640,17 @@ export default function App() {
                 }}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:36,height:36,borderRadius:10,background:open?bc:C.cardSub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏡</div>
+                      {/* 順位バッジ */}
+                      <div style={{
+                        width:28,height:28,borderRadius:"50%",flexShrink:0,
+                        background: idx===0?"#f5a623":idx===1?"#aaa":idx===2?"#cd7f32":C.cardSub,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        color: idx<3?"#fff":C.textDim, fontWeight:900, fontSize:12,
+                      }}>{idx+1}</div>
+                      <div style={{width:32,height:32,borderRadius:10,background:open?bc:C.cardSub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🏡</div>
                       <div>
-                        <div style={{color:open?bc:C.text,fontWeight:900,fontSize:15}}>{s.breeder}</div>
-                        <div style={{color:C.textDim,fontSize:11}}>導入 {s.head}頭</div>
+                        <div style={{color:open?bc:C.text,fontWeight:900,fontSize:14}}>{s.breeder}</div>
+                        <div style={{color:C.textDim,fontSize:11}}>{s.head}頭導入</div>
                       </div>
                     </div>
                     <span style={{color:C.textDim,fontSize:16}}>{open?"▲":"▼"}</span>
@@ -1644,24 +1682,26 @@ export default function App() {
                             borderRadius:14,padding:"12px 14px",marginBottom:8,
                             cursor:"pointer",boxShadow:C.shadow,
                           }}>
-                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                                <TagDisplay tag={c.tag} size={11} highlightSize={15} color={C.accent}/>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,alignItems:"center"}}>
+                              <TagDisplay tag={c.tag} size={11} highlightSize={15} color={C.accent}/>
+                              <div style={{display:"flex",gap:4,alignItems:"center"}}>
                                 {c.status==="出荷済"&&<Tag label="出荷済" color={C.textDim} bg="#efefef"/>}
+                                <Tag label={c.sex} color={c.sex==="雌"?"#e06090":C.purple}/>
                               </div>
-                              <Tag label={c.sex} color={c.sex==="雌"?"#e06090":C.purple}/>
                             </div>
+                            {/* 繁殖農家名 */}
+                            {c.name&&<div style={{color:C.textDim,fontSize:11,marginBottom:6}}>🏡 繁殖農家: {c.name}</div>}
                             {/* 父血統 */}
                             {c.pedigree?.sire?.name&&(
                               <div style={{fontSize:11,color:C.textDim,marginBottom:8}}>
                                 🐂 父: <b style={{color:C.purple}}>{c.pedigree.sire.name}</b>
-                                {c.pedigree?.dam?.sire?.name&&<span>　母の父: {c.pedigree.dam.sire.name}</span>}
+                                {c.pedigree?.dam?.sire?.name&&<span>　母父: {c.pedigree.dam.sire.name}</span>}
                               </div>
                             )}
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
                               {[
                                 {label:"DG",     val:dg_c?`${dg_c.toFixed(2)}`:null, color:C.accent},
-                                {label:"BMS",    val:c.result?.bms??null,             color:C.red},
+                                {label:"BMS",    val:c.result?.bms!=null?`${c.result.bms}`:null, color:C.red},
                                 {label:"枝肉DG", val:c.result?.dg?`${c.result.dg}`:null, color:C.green},
                               ].map(({label,val,color})=>(
                                 <div key={label} style={{background:C.cardSub,borderRadius:8,padding:"5px 8px"}}>
@@ -1688,7 +1728,7 @@ export default function App() {
 
           {breederData.length===0&&(
             <div style={{textAlign:"center",padding:32,color:C.textDim,fontSize:13}}>
-              繁殖農家のデータがありません
+              導入元のデータがありません
             </div>
           )}
         </div>
