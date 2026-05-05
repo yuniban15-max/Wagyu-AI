@@ -2053,7 +2053,7 @@ export default function App() {
             ))}
           </div>
 
-          <div style={{padding:"0 16px"}}>
+          <div style={{padding:"0 16px 16px"}}>
           {/* サマリーバー */}
           <div style={{
             background:`linear-gradient(135deg,${levelColor}18,${C.accentLight})`,
@@ -2070,7 +2070,7 @@ export default function App() {
           {data.length===0&&(
             <Card><div style={{color:C.textDim,textAlign:"center",padding:24,fontSize:13}}>血統データがありません</div></Card>
           )}
-        </div>
+          </div>
       </div>
     );
   };
