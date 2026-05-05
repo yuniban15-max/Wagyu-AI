@@ -288,7 +288,27 @@ function PedigreeTree({pedigree}) {
   );
 }
 
-// ── PEDIGREE FORM ──────────────────────────────────────────────────────────────
+// ── 耳標番号表示（6〜9文字目を大きく太字） ────────────────────────────────
+const TagDisplay = ({tag, size=14, highlightSize=18, color="#4ab8e8"}) => {
+  if(!tag) return null;
+  const digits = tag.replace(/[^0-9]/g,"");
+  if(digits.length < 9) return <span style={{color,fontWeight:900,fontSize:size,fontFamily:"monospace"}}>{tag}</span>;
+  const before  = tag.slice(0, tag.length - (10 - 5));      // 1〜5文字目部分
+  const mid     = tag.slice(tag.indexOf(digits[5]), tag.indexOf(digits[5]) + 4); // 6〜9文字目
+  const after   = tag.slice(tag.indexOf(digits[5]) + 4);    // 10文字目以降
+  // シンプルに数字の位置で分割
+  const d = digits;
+  const pre  = d.slice(0,5);
+  const hi   = d.slice(5,9);
+  const post = d.slice(9);
+  return (
+    <span style={{fontFamily:"monospace"}}>
+      <span style={{color,fontWeight:700,fontSize:size}}>{pre}</span>
+      <span style={{color,fontWeight:900,fontSize:highlightSize}}>{hi}</span>
+      <span style={{color,fontWeight:700,fontSize:size}}>{post}</span>
+    </span>
+  );
+};
 function PedigreeForm({pedigree, onChange}) {
   const set = (path, val) => {
     const keys = path.split(".");
@@ -1170,7 +1190,7 @@ export default function App() {
               }}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{color:C.accent,fontWeight:900,fontSize:14,fontFamily:"monospace"}}>{c.tag}</span>
+                    <TagDisplay tag={c.tag} size={13} highlightSize={17} color={C.accent}/>
                     <span style={{color:C.text,fontWeight:700,fontSize:15}}>{c.name}</span>
                   </div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -1863,8 +1883,8 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <button onClick={()=>setPage("home")} style={{background:C.accentLight,border:"none",color:C.accentDark,borderRadius:10,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>← 戻る</button>
             <div style={{flex:1}}>
-              <span style={{color:C.accent,fontWeight:900,fontSize:15,fontFamily:"monospace",marginRight:6}}>{cow.tag}</span>
-              <span style={{color:C.text,fontWeight:800,fontSize:16}}>{cow.name}</span>
+              <TagDisplay tag={cow.tag} size={14} highlightSize={19} color={C.accent}/>
+              <span style={{color:C.text,fontWeight:800,fontSize:16,marginLeft:8}}>{cow.name}</span>
             </div>
             {/* 編集・削除ボタン */}
             <button onClick={openEdit} style={{background:C.accentLight,border:`1px solid ${C.border}`,color:C.accentDark,borderRadius:10,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✏️ 編集</button>
