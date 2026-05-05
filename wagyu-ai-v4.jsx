@@ -3905,21 +3905,16 @@ ${JSON.stringify(summary, null, 2)}
     {id:"genetics", icon:"🧬", label:"血統分析"},
   ];
 
-  // ページ別早期return
-  const currentPage = () => {
-    if(page==="shipResult") return <ShipResultScreen/>;
-    if(page==="intake")     return <IntakeScreen/>;
-    if(page==="add") return (
+  // ページ別return
+  return (
+    page==="shipResult" ? <ShipResultScreen/> :
+    page==="intake"     ? <IntakeScreen/> :
+    page==="add"        ? (
       <div key={addFormKey} style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto"}}>
         <AddScreen/>
         {showOcr&&<OcrModal onClose={()=>setShowOcr(false)} onApply={applyOcr}/>}
       </div>
-    );
-    return null;
-  };
-  const earlyPage = currentPage();
-
-  return earlyPage || (
+    ) : (
     <div style={{background:C.bg,minHeight:"100vh",color:C.text,fontFamily:"'Hiragino Kaku Gothic Pro','Noto Sans JP','YuGothic',sans-serif",maxWidth:520,margin:"0 auto",position:"relative"}}>
       {page==="home"     && <HomeScreen/>}
       {page==="alerts"   && <AlertsScreen/>}
@@ -3988,5 +3983,6 @@ ${JSON.stringify(summary, null, 2)}
         })}
       </div>
     </div>
+    )
   );
 }
