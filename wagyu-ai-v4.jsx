@@ -1196,21 +1196,21 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 血統（父・母の父・母の母の父）*/}
-                <div style={{background:C.cardSub,borderRadius:10,padding:"7px 10px",marginBottom:8,fontSize:10,lineHeight:1.9}}>
-                  <div style={{display:"flex",alignItems:"center"}}>
-                    <span style={{color:C.textDim,width:52,flexShrink:0}}>父</span>
-                    <span style={{fontWeight:700,color:C.purple}}>{c.pedigree?.sire?.name||"―"}</span>
-                    {ageStr!=="―"&&<span style={{color:C.textDim,marginLeft:"auto"}}>{ageStr}</span>}
+                {/* 血統（横並び3つ）*/}
+                <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
+                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
+                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>父</div>
+                    <div style={{fontWeight:700,color:C.purple,fontSize:11}}>{c.pedigree?.sire?.name||"―"}</div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center"}}>
-                    <span style={{color:C.textDim,width:52,flexShrink:0}}>母の父</span>
-                    <span style={{color:C.text}}>{c.pedigree?.dam?.sire?.name||"―"}</span>
+                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
+                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>母の父</div>
+                    <div style={{color:C.text,fontSize:11,fontWeight:600}}>{c.pedigree?.dam?.sire?.name||"―"}</div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center"}}>
-                    <span style={{color:C.textDim,width:52,flexShrink:0}}>母母父</span>
-                    <span style={{color:C.text}}>{c.pedigree?.dam?.dam?.sire?.name||"―"}</span>
+                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
+                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>母母父</div>
+                    <div style={{color:C.text,fontSize:11,fontWeight:600}}>{c.pedigree?.dam?.dam?.sire?.name||"―"}</div>
                   </div>
+                  {ageStr!=="―"&&<span style={{color:C.textDim,fontSize:10,flexShrink:0}}>{ageStr}</span>}
                 </div>
 
                 {/* 肥育中：体重・DG・導入金額 */}
@@ -1233,16 +1233,16 @@ export default function App() {
                 {shipped&&c.result&&(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginBottom:8}}>
                     {[
-                      {label:"等級",     val:c.result.grade,                                    color: c.result.grade?.startsWith("A5")?"#d04020":c.result.grade?.startsWith("A4")?C.amber:C.green},
-                      {label:"BMS",      val:c.result.bms!=null?`${c.result.bms}`:null,          color:C.red},
-                      {label:"販売額",   val:fmtM(c.result.sellPrice),                          color:C.amber},
-                      {label:"枝肉重量", val:c.result.coldWeight?`${c.result.coldWeight}kg`:null, color:C.accentDark},
-                      {label:"枝肉DG",  val:c.result.dg?`${c.result.dg}kg/日`:null,             color:C.green},
-                      {label:"歩留",     val:c.result.yieldGrade||null,                          color:C.purple},
+                      {label:"等級",     val:c.result.grade,                                     color: c.result.grade?.startsWith("A5")?"#d04020":c.result.grade?.startsWith("A4")?C.amber:C.green},
+                      {label:"BMS",      val:c.result.bms!=null?`${c.result.bms}`:null,           color:C.red},
+                      {label:"販売額",   val:fmtM(c.result.sellPrice),                           color:C.amber},
+                      {label:"枝肉重量", val:c.result.coldWeight?`${c.result.coldWeight}kg`:null,  color:C.accentDark},
+                      {label:"枝肉DG",   val:c.result.dg?`${c.result.dg}kg/日`:null,              color:C.green},
+                      {label:"導入金額", val:c.costs?.purchasePrice?fmtM(c.costs.purchasePrice):"―", color:C.textMid},
                     ].map(({label,val,color})=>(
                       <div key={label} style={{background:C.cardSub,borderRadius:8,padding:"5px 8px"}}>
                         <div style={{color:C.textDim,fontSize:9,marginBottom:1}}>{label}</div>
-                        <div style={{color:val!=null?color:C.textDim,fontSize:12,fontWeight:700}}>{val??"―"}</div>
+                        <div style={{color:val&&val!=="―"?color:C.textDim,fontSize:12,fontWeight:700}}>{val??"―"}</div>
                       </div>
                     ))}
                   </div>
