@@ -695,6 +695,7 @@ export default function App() {
     return {
       farmName: "",
       farmId: "farm_" + Math.random().toString(36).slice(2,8),
+      shippingMonths: 28,
       defaultCosts:{ roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
     };
   });
@@ -923,6 +924,11 @@ export default function App() {
               <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>農場ID（複数スマホで同じIDにすると同じデータが見れます）</div>
               <input value={loc.farmId||""} onChange={e=>sf("farmId",e.target.value)} placeholder="例: tanaka_farm_001" style={inp}/>
             </div>
+            <div style={{marginBottom:8}}>
+              <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>出荷目標月齢（ヶ月）</div>
+              <input type="number" value={loc.shippingMonths||28} onChange={e=>sf("shippingMonths",Number(e.target.value)||28)} placeholder="28" style={inp}/>
+              <div style={{color:C.textDim,fontSize:10,marginTop:3}}>個体一覧の出荷予定月齢表示に使用します</div>
+            </div>
             <div style={{color:C.textDim,fontSize:11}}>⚠️ 全スマホで同じIDにしてください</div>
           </div>
 
@@ -949,6 +955,38 @@ export default function App() {
           <div style={{background:C.amberLight,borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1px solid ${C.amber}22`}}>
             <div style={{color:C.amber,fontWeight:800,fontSize:13,marginBottom:10}}>🏗️ 固定経費（通期）</div>
             {numRow("固定経費（円）", loc.defaultCosts.fixedOther, e=>sc("fixedOther",e.target.value), "円", "施設費・減価償却など")}
+          </div>
+
+          {/* 危険ゾーン */}
+          <div style={{background:"#fff5f5",borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1.5px solid ${C.red}44`}}>
+            <div style={{color:C.red,fontWeight:800,fontSize:13,marginBottom:8}}>⚠️ 危険ゾーン</div>
+            <div style={{color:C.textMid,fontSize:12,marginBottom:12,lineHeight:1.6}}>
+              全個体データを削除します。<br/>
+              <b style={{color:C.red}}>この操作は元に戻せません。</b>
+            </div>
+            <button onClick={async ()=>{
+              const ok = window.confirm("本当に全データを削除しますか？\nこの操作は元に戻せません。");
+              if(!ok) return;
+              const ok2 = window.confirm("最終確認：全個体データを削除します。よろしいですか？");
+              if(!ok2) return;
+              // Supabaseから削除
+              if(typeof window.deleteCowRemote === "function"){
+                for(const c of cattle){
+                  await window.deleteCowRemote(c.id);
+                }
+              }
+              // localStorageから削除
+              try { localStorage.removeItem('wagyu_cattle_' + window.getFarmId()); } catch(e) {}
+              setCattle([]);
+              setShowSettings(false);
+            }} style={{
+              width:"100%", background:C.red,
+              color:"#fff", border:"none",
+              borderRadius:10, padding:"11px 0",
+              fontSize:14, fontWeight:800, cursor:"pointer",
+            }}>
+              🗑️ 全データを削除する
+            </button>
           </div>
 
           <Btn full onClick={save}>設定を保存する</Btn>
@@ -1174,8 +1212,20 @@ export default function App() {
             const dg_c=calcDG(c.weights),du=daysUntil(c.shippingPlan),lw=latestWeight(c.weights),cv=calcCosts(c);
             const urgent=du!==null&&du<=60&&c.status!=="出荷済";
             const shipped=c.status==="出荷済";
-            const introW=c.weights?.[0]?.weight;
-            const ageStr=calcAge(c.birthDate);
+            // 月齢計算
+            const ageMonths = c.birthDate ? Math.floor((Date.now()-new Date(c.birthDate))/(30.44*86400000)) : null;
+            const ageStr = ageMonths!=null ? `${ageMonths}ヶ月` : "―";
+            // 出荷予定月齢（生年月日+目標月齢）
+            const targetMonths = settings.shippingMonths || 28;
+            const shipAgeMonths = c.birthDate ? (() => {
+              const birth = new Date(c.birthDate);
+              const shipDate = c.shippingPlan ? new Date(c.shippingPlan) : null;
+              if(!shipDate) return null;
+              return Math.round((shipDate - birth) / (30.44*86400000));
+            })() : null;
+            // 月額コスト
+            const dailyCost = (cv.roughageDaily||0) + (cv.compoundKgPerDay||0)*(cv.compoundKgPrice||0) + (cv.otherDaily||0);
+            const monthlyCost = Math.round(dailyCost * 30);
             return (
               <div key={c.id} onClick={()=>goDetail(c.id)} style={{
                 background: shipped?"#f8f8f8":"#fff",
@@ -1214,13 +1264,13 @@ export default function App() {
                   {ageStr!=="―"&&<span style={{color:C.textDim,fontSize:10,flexShrink:0,paddingLeft:8,borderLeft:`1px solid ${C.border}`}}>{ageStr}</span>}
                 </div>
 
-                {/* 肥育中：体重・DG・導入金額 */}
+                {/* 肥育中：体重・月額コスト・導入金額 */}
                 {!shipped&&(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
                     {[
-                      ["⚖️ 最新体重", lw?`${lw}kg`:"未計測"],
-                      ["📈 DG",       dg_c?`+${dg_c.toFixed(2)}`:"―"],
-                      ["💴 導入金額", c.costs?.purchasePrice?fmtM(c.costs.purchasePrice):"―"],
+                      ["⚖️ 最新体重",  lw?`${lw}kg`:"未計測"],
+                      ["💰 月額コスト", monthlyCost?fmtM(monthlyCost):"―"],
+                      ["💴 導入金額",   c.costs?.purchasePrice?fmtM(c.costs.purchasePrice):"―"],
                     ].map(([k,v])=>(
                       <div key={k} style={{background:C.cardSub,borderRadius:10,padding:"6px 10px"}}>
                         <div style={{color:C.textDim,fontSize:9,marginBottom:2}}>{k}</div>
@@ -2916,7 +2966,10 @@ JSONのみ返してください。`;
             memo:          getValue(row,"メモ"),
             status:        "肥育中",
             result:        null,
-            weights:       [],
+            weights:       getValue(row,"導入体重") ? [{
+              date: normalizeDate(getValue(row,"導入日"))||new Date().toISOString().slice(0,10),
+              weight: Number(getValue(row,"導入体重"))||0,
+            }] : [],
             vaccines:      [],
             treatments:    [],
             pedigree: {
@@ -2959,13 +3012,16 @@ JSONのみ返してください。`;
       const newCattle = animals.map(a=>({
         ...a,
         id: Date.now().toString()+Math.random(),
-        introDate, farm, pen,
-        shippingPlan:"", expectedPrice:0, memo:"", status:"肥育中", result:null,
+        introDate: a.introDate || introDate,
+        farm:      a.farm || farm,        // Excelの導入元を優先
+        pen:       a.pen  || pen,
+        status:"肥育中", result:null,
         weights:[], vaccines:[], treatments:[],
         costs:{
-          purchasePrice:    a.purchasePrice,
+          // Excelから読み込んだ購入価格を優先
+          purchasePrice:    a.costs?.purchasePrice || a.purchasePrice || 0,
           roughageDaily:    settings.defaultCosts.roughageDaily,
-          compoundKgPerDay: Number(feedCostPerDay)||settings.defaultCosts.compoundKgPerDay,
+          compoundKgPerDay: settings.defaultCosts.compoundKgPerDay,
           compoundKgPrice:  settings.defaultCosts.compoundKgPrice,
           otherDaily:       settings.defaultCosts.otherDaily,
           fixedOther:       settings.defaultCosts.fixedOther,
@@ -3244,7 +3300,7 @@ JSONのみ返してください。`;
           {step===3&&(
             <div>
               {/* 進捗バー */}
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
                 {animals.map((a,i)=>(
                   <div key={a.id} onClick={()=>{setCertIdx(i);setCertStatus("idle");setCertPreview(null);}}
                     style={{
@@ -3257,6 +3313,28 @@ JSONのみ返してください。`;
                     {a.certDone?"✅ ":"📋 "}{i+1}頭目{a.tag?` ${a.tag}`:""}
                   </div>
                 ))}
+              </div>
+
+              {/* 全頭スキップボタン */}
+              <div style={{
+                background:C.amberLight, border:`1.5px solid ${C.amber}44`,
+                borderRadius:12, padding:"10px 14px", marginBottom:14,
+                display:"flex", alignItems:"center", justifyContent:"space-between",
+              }}>
+                <div style={{fontSize:12,color:C.textMid,lineHeight:1.5}}>
+                  Excelで血統入力済みの場合は<br/>まとめてスキップできます
+                </div>
+                <button onClick={()=>{
+                  setAnimals(prev=>prev.map(a=>({...a,certDone:true})));
+                  setStep(4);
+                }} style={{
+                  background:`linear-gradient(135deg,${C.amber},#c87010)`,
+                  color:"#fff", border:"none", borderRadius:10,
+                  padding:"8px 16px", fontSize:13, fontWeight:800,
+                  cursor:"pointer", flexShrink:0, marginLeft:12,
+                }}>
+                  全頭スキップ →
+                </button>
               </div>
 
               <div style={{color:C.text,fontWeight:900,fontSize:18,marginBottom:4}}>
