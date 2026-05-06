@@ -2454,89 +2454,58 @@ export default function App() {
     /* ── ファイル受け取り ── */
     const handleFile = async (file) => {
       if(!file) return;
-      const pdf = file.type === "application/pdf";
-      setIsPdf(pdf);
-      setStatus("loading");
-      setResults([]); setMatched([]); setErrMsg("");
-
-      // 画像プレビュー
-      if(!pdf){
-        const r = new FileReader();
-        r.onload = e => setPreview(e.target.result);
-        r.readAsDataURL(file);
-      } else {
-        setPreview(null);
-      }
-
-      // base64
-      const b64 = await new Promise((res,rej)=>{
-        const r2 = new FileReader();
-        r2.onload = () => res(r2.result.split(",")[1]);
-        r2.onerror = rej;
-        r2.readAsDataURL(file);
-      });
-
-      const prompt = `この画像は和牛の出荷伝票・枝肉成績書・精算書です。
-複数頭分の出荷成績をすべて読み取り、以下のJSON配列で返してください。
-読み取れない項目は null にしてください。
-
-[
-  {
-    "tag": "耳標番号（10桁数字またはハイフン付き）",
-    "name": "牛名（あれば）",
-    "sellPrice": 販売金額の数値,
-    "grade": "格付等級（例: A5）",
-    "yieldGrade": "歩留等級（A/B/C）",
-    "bms": BMS数値（1〜12の整数）,
-    "loinArea": ロース芯面積の数値（cm²）,
-    "ribThickness": バラ厚の数値（cm）,
-    "bft": 皮下脂肪厚の数値（cm）,
-    "coldWeight": 枝肉重量の数値（kg）,
-    "dg": 実績DGの数値（kg/日）,
-    "shippingDate": "出荷日（YYYY-MM-DD）"
-  }
-]
-
-全頭分を配列に含めてください。JSONのみ返してください。`;
+      setStatus("loading"); setErrMsg("");
 
       try {
-        const contentItem = pdf
-          ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:b64 } }
-          : { type:"image",    source:{ type:"base64", media_type:file.type||"image/jpeg", data:b64 } };
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, {type:"array", cellDates:true});
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
 
-        const resp = await fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST",
-          headers:{"Content-Type":"application/json","x-api-key":window.ANTHROPIC_KEY||"","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-          body:JSON.stringify({
-            model:"claude-sonnet-4-20250514",
-            max_tokens:1500,
-            messages:[{ role:"user", content:[
-              contentItem,
-              { type:"text", text:prompt }
-            ]}]
-          })
-        });
-        const data = await resp.json();
-        const text = data.content?.map(c=>c.text||"").join("")||"";
-        const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
-        const arr = Array.isArray(parsed) ? parsed : [parsed];
-        setResults(arr);
+        if(rows.length < 3) throw new Error("データが3行目以降に入力されていません");
 
-        // 既存個体とマッチング（耳標で照合）
+        const headers = (rows[0]||[]).map(h=>String(h||"").trim());
+        const getValue = (row, name) => {
+          const i = headers.indexOf(name);
+          return i>=0 ? String(row[i]||"").trim() : "";
+        };
+        const normalizeDate = (v) => {
+          if(!v) return "";
+          const s = String(v).replace(/\//g,"-");
+          const parts = s.split("-");
+          if(parts.length===3) return `${parts[0]}-${parts[1].padStart(2,"0")}-${parts[2].padStart(2,"0")}`;
+          return s;
+        };
+
+        const arr = rows.slice(2).filter(row=>
+          row.some(c=>c!=null&&String(c).trim()!=="")
+        ).map(row=>({
+          tag:          getValue(row,"耳標番号").replace(/[^0-9]/g,""),
+          shippingDate: normalizeDate(getValue(row,"出荷日")),
+          grade:        getValue(row,"等級")||null,
+          yieldGrade:   getValue(row,"歩留等級")||null,
+          bms:          Number(getValue(row,"BMS"))||null,
+          loinArea:     Number(getValue(row,"ロース芯面積"))||null,
+          ribThickness: Number(getValue(row,"バラ厚"))||null,
+          bft:          Number(getValue(row,"皮下脂肪厚"))||null,
+          coldWeight:   Number(getValue(row,"枝肉重量"))||null,
+          dg:           Number(getValue(row,"枝肉DG"))||null,
+          sellPrice:    Number(getValue(row,"販売金額").replace(/[^\d]/g,""))||null,
+        })).filter(r=>r.tag);
+
+        if(arr.length===0) throw new Error("有効なデータが見つかりません");
+
+        // 既存個体と照合
         const m = arr.map(r => {
-          const cow = cattle.find(c =>
-            c.tag && r.tag &&
-            (c.tag.replace(/[^0-9]/g,"") === r.tag.replace(/[^0-9]/g,"") ||
-             c.tag === r.tag ||
-             (r.name && c.name === r.name))
+          const cow = cattle.find(c=>
+            c.tag && (c.tag.replace(/[^0-9]/g,"")===r.tag || c.tag===r.tag)
           );
-          return { ocr:r, cow: cow||null, selected: !!cow, overwrite: false };
+          return { ocr:r, cow:cow||null, selected:!!cow };
         });
         setMatched(m);
         setStatus("done");
       } catch(e) {
-        console.error(e);
-        setErrMsg("読み取りに失敗しました。鮮明な写真・PDFで再試行してください。");
+        setErrMsg("読み込みエラー: " + e.message);
         setStatus("error");
       }
     };
@@ -2592,11 +2561,10 @@ export default function App() {
           {/* idle / error → アップロードUI */}
           {(status==="idle"||status==="error")&&(
             <div>
-              <div style={{color:C.text,fontWeight:800,fontSize:17,marginBottom:6}}>出荷伝票を読み込む</div>
-              <div style={{color:C.textMid,fontSize:13,marginBottom:20,lineHeight:1.7}}>
-                出荷伝票・枝肉成績書・精算書の<br/>
-                <b>PDF または 写真</b>を選択してください。<br/>
-                複数頭分がまとまった伝票でも一括で読み取ります。
+              <div style={{color:C.text,fontWeight:800,fontSize:17,marginBottom:6}}>出荷成績Excelを読み込む</div>
+              <div style={{color:C.textMid,fontSize:13,marginBottom:16,lineHeight:1.7}}>
+                <b>wagyu_出荷成績フォーマット.xlsx</b> に入力した<br/>
+                ファイルを選択してください。
               </div>
 
               {status==="error"&&(
@@ -2605,45 +2573,20 @@ export default function App() {
                 </div>
               )}
 
-              <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:"none"}}
-                onChange={e=>handleFile(e.target.files?.[0])}/>
-              <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:"none"}}
-                onChange={e=>handleFile(e.target.files?.[0])}/>
-
-              {/* カメラ撮影 */}
               <div onClick={()=>{
                 const inp2=document.createElement("input");
-                inp2.type="file"; inp2.accept="image/*"; inp2.capture="environment";
+                inp2.type="file"; inp2.accept=".xlsx,.xls,.csv";
                 inp2.onchange=e=>handleFile(e.target.files?.[0]);
                 inp2.click();
               }} style={{
                 background:`linear-gradient(135deg,${C.amber}18,${C.amberLight})`,
                 border:`2px dashed ${C.amber}`,
                 borderRadius:18, padding:"28px 20px", textAlign:"center",
-                cursor:"pointer", marginBottom:10,
+                cursor:"pointer",
               }}>
-                <div style={{fontSize:44,marginBottom:8}}>📷</div>
-                <div style={{color:C.amber,fontWeight:800,fontSize:16,marginBottom:4}}>カメラで撮影</div>
-                <div style={{color:C.textMid,fontSize:12}}>出荷伝票をカメラで撮影</div>
-              </div>
-
-              {/* ファイル選択（画像・PDF両対応） */}
-              <div onClick={()=>{
-                const inp2=document.createElement("input");
-                inp2.type="file"; inp2.accept="image/*,application/pdf";
-                inp2.onchange=e=>handleFile(e.target.files?.[0]);
-                inp2.click();
-              }} style={{
-                background:"#fff", border:`1.5px solid ${C.border}`,
-                borderRadius:14, padding:"16px 20px", textAlign:"center",
-                cursor:"pointer", display:"flex", alignItems:"center",
-                justifyContent:"center", gap:10, boxShadow:C.shadow,
-              }}>
-                <span style={{fontSize:28}}>📄</span>
-                <div style={{textAlign:"left"}}>
-                  <div style={{color:C.text,fontWeight:700,fontSize:14}}>ファイルを選択</div>
-                  <div style={{color:C.textDim,fontSize:11,marginTop:2}}>PDF・JPG・PNG 対応</div>
-                </div>
+                <div style={{fontSize:44,marginBottom:8}}>📊</div>
+                <div style={{color:C.amber,fontWeight:800,fontSize:16,marginBottom:4}}>Excelファイルを選択</div>
+                <div style={{color:C.textMid,fontSize:12}}>xlsx / csv 対応</div>
               </div>
             </div>
           )}
@@ -2916,109 +2859,98 @@ JSONのみ返してください。`;
     });
     const updateAnimal = (i,fn) => setAnimals(prev=>prev.map((a,idx)=>idx===i?fn(a):a));
 
-    /* ── Excel / CSV 読み込み ─────────────────────── */
-    const [xlsxStatus, setXlsxStatus] = useState("idle"); // idle|loading|done|error
+    /* ── Excel / CSV 読み込み（AIなし・列固定方式）─────────────────────── */
+    const [xlsxStatus, setXlsxStatus] = useState("idle");
     const [xlsxMsg,    setXlsxMsg]    = useState("");
 
     const handleExcel = async (file) => {
       if(!file) return;
-      setXlsxStatus("loading");
-      setXlsxMsg("");
+      setXlsxStatus("loading"); setXlsxMsg("");
       try {
-        let csvText = "";
-        const name = file.name.toLowerCase();
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, {type:"array", cellDates:true});
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
 
-        if(name.endsWith(".csv")) {
-          // CSV: そのまま読む
-          csvText = await file.text();
-        } else {
-          // Excel: SheetJSで変換
-          const buf = await file.arrayBuffer();
-          const wb  = XLSX.read(buf, {type:"array", cellDates:true});
-          const ws  = wb.Sheets[wb.SheetNames[0]];
-          csvText   = XLSX.utils.sheet_to_csv(ws);
-        }
+        // 1行目がヘッダー、2行目が入力例 → 3行目以降がデータ
+        if(rows.length < 3){ throw new Error("データが3行目以降に入力されていません"); }
 
-        // 先頭3000字をClaudeに渡して解析
-        const prompt = `以下は和牛農場のExcel（CSV変換）データです。
-各行を個体データとして解釈し、以下のJSON配列で返してください。
-列名は日本語・英語・略称どれでも対応してください。
-読み取れない項目はnullにしてください。
+        // ヘッダー行でカラムインデックスを特定
+        const headers = (rows[0]||[]).map(h=>String(h||"").trim());
+        const col = (name) => headers.indexOf(name);
 
-CSV:
-${csvText.slice(0, 4000)}
+        const getValue = (row, name) => {
+          const i = col(name);
+          return i>=0 ? String(row[i]||"").trim() : "";
+        };
 
-返すJSON配列の型:
-[{
-  "tag": "耳標番号",
-  "name": "牛名",
-  "sex": "去勢|雌|雄",
-  "breed": "品種",
-  "birthDate": "YYYY-MM-DD",
-  "introDate": "YYYY-MM-DD",
-  "purchasePrice": 数値,
-  "farm": "導入市場",
-  "pen": "牛舎",
-  "shippingPlan": "YYYY-MM-DD",
-  "expectedPrice": 数値,
-  "sire": "父名",
-  "sireSire": "父の父名",
-  "dam": "母名",
-  "damSire": "母の父名",
-  "memo": "メモ"
-}]
-ヘッダー行・空行・合計行は無視してください。JSONのみ返してください。`;
+        const mapped = rows.slice(2).filter(row=>
+          row.some(c=>c!=null&&String(c).trim()!=="")
+        ).map((row, idx) => {
+          const tag = getValue(row,"耳標番号");
+          if(!tag) return null;
 
-        const resp = await fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST",
-          headers:{"Content-Type":"application/json","x-api-key":window.ANTHROPIC_KEY||"","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-          body:JSON.stringify({
-            model:"claude-sonnet-4-20250514",
-            max_tokens:2000,
-            messages:[{role:"user",content:prompt}]
-          })
-        });
-        const data = await resp.json();
-        const text = data.content?.map(c=>c.text||"").join("")||"";
-        const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
-        const arr = Array.isArray(parsed) ? parsed : [parsed];
+          // 日付の正規化
+          const normalizeDate = (v) => {
+            if(!v) return "";
+            const s = String(v).replace(/\//g,"-").replace(/\./g,"-");
+            if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
+              const [y,m,d] = s.split("-");
+              return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+            }
+            return s;
+          };
 
-        // animals配列に変換
-        const mapped = arr.filter(r=>r.tag||r.name).map(r => ({
-          id: `xl-${Date.now()}-${Math.random()}`,
-          tag:           r.tag||"",
-          name:          r.name||"",
-          sex:           r.sex||"去勢",
-          breed:         r.breed||"黒毛和種",
-          birthDate:     r.birthDate||"",
-          purchasePrice: Number(r.purchasePrice)||0,
-          pen:           r.pen||"",
-          pedigree: {
-            sire:{ name:r.sire||"",
-              sire:{ name:r.sireSire||"", sire:{name:""}, dam:{name:""}},
-              dam: { name:"",             sire:{name:""}, dam:{name:""}} },
-            dam: { name:r.dam||"",
-              sire:{ name:r.damSire||"",  sire:{name:""}, dam:{name:""}},
-              dam: { name:"",             sire:{name:""}, dam:{name:""}} },
-          },
-          certDone: false,
-          _shippingPlan:  r.shippingPlan||"",
-          _expectedPrice: Number(r.expectedPrice)||0,
-          _memo:          r.memo||"",
-        }));
+          return {
+            id: `xl-${Date.now()}-${idx}`,
+            tag,
+            name:          getValue(row,"繁殖農家名"),
+            farm:          getValue(row,"導入元市場"),
+            sex:           getValue(row,"性別")||"去勢",
+            breed:         getValue(row,"品種")||"黒毛和種",
+            birthDate:     normalizeDate(getValue(row,"生年月日")),
+            introDate:     normalizeDate(getValue(row,"導入日"))||new Date().toISOString().slice(0,10),
+            pen:           getValue(row,"牛舎・ペン"),
+            shippingPlan:  normalizeDate(getValue(row,"出荷予定日")),
+            expectedPrice: Number(getValue(row,"予想販売価格").replace(/[^\d]/g,""))||0,
+            memo:          getValue(row,"メモ"),
+            status:        "肥育中",
+            result:        null,
+            weights:       [],
+            vaccines:      [],
+            treatments:    [],
+            pedigree: {
+              sire:{ name:getValue(row,"父"),
+                sire:{ name:"", sire:{name:""}, dam:{name:""}},
+                dam: { name:"", sire:{name:""}, dam:{name:""}}},
+              dam: { name:getValue(row,"母"),
+                sire:{ name:getValue(row,"母の父"),  sire:{name:""}, dam:{name:""}},
+                dam: { name:"",
+                  sire:{ name:getValue(row,"母の母の父"), sire:{name:""}, dam:{name:""}},
+                  dam: { name:"", sire:{name:""}, dam:{name:""}}}},
+            },
+            costs:{
+              purchasePrice:    Number(getValue(row,"購入価格").replace(/[^\d]/g,""))||0,
+              roughageDaily:    settings.defaultCosts.roughageDaily,
+              compoundKgPerDay: settings.defaultCosts.compoundKgPerDay,
+              compoundKgPrice:  settings.defaultCosts.compoundKgPrice,
+              otherDaily:       settings.defaultCosts.otherDaily,
+              fixedOther:       settings.defaultCosts.fixedOther,
+              vetCosts: 0,
+            },
+          };
+        }).filter(Boolean);
 
-        // 共通情報（最初の行から）
-        if(arr[0]?.introDate)  setIntroDate(arr[0].introDate);
-        if(arr[0]?.farm)       setFarm(arr[0].farm);
+        if(mapped.length===0) throw new Error("有効なデータが見つかりません。耳標番号を入力してください。");
 
-        setAnimals(mapped.length>0 ? mapped : [newAnimal()]);
+        setAnimals(mapped);
         setXlsxStatus("done");
         setXlsxMsg(`${mapped.length}頭を読み込みました`);
-        setStep(2); // 確認ステップへ
+        setStep(2);
       } catch(e) {
         console.error(e);
         setXlsxStatus("error");
-        setXlsxMsg("読み込みに失敗しました。ファイル形式を確認して再試行してください。");
+        setXlsxMsg("読み込みエラー: " + e.message);
       }
     };
 
