@@ -1196,21 +1196,22 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 血統（横並び3つ）*/}
-                <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
-                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
-                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>父</div>
-                    <div style={{fontWeight:700,color:C.purple,fontSize:11}}>{c.pedigree?.sire?.name||"―"}</div>
-                  </div>
-                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
-                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>母の父</div>
-                    <div style={{color:C.text,fontSize:11,fontWeight:600}}>{c.pedigree?.dam?.sire?.name||"―"}</div>
-                  </div>
-                  <div style={{flex:1,background:C.cardSub,borderRadius:8,padding:"5px 8px",textAlign:"center"}}>
-                    <div style={{color:C.textDim,fontSize:8,marginBottom:1}}>母母父</div>
-                    <div style={{color:C.text,fontSize:11,fontWeight:600}}>{c.pedigree?.dam?.dam?.sire?.name||"―"}</div>
-                  </div>
-                  {ageStr!=="―"&&<span style={{color:C.textDim,fontSize:10,flexShrink:0}}>{ageStr}</span>}
+                {/* 血統（横並び3つ・背景つながり）*/}
+                <div style={{background:C.cardSub,borderRadius:10,padding:"7px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:0}}>
+                  {[
+                    {val:c.pedigree?.sire?.name,     color:C.purple, fw:700},
+                    {val:c.pedigree?.dam?.sire?.name, color:C.text,   fw:600},
+                    {val:c.pedigree?.dam?.dam?.sire?.name, color:C.text, fw:600},
+                  ].map((item,i)=>(
+                    <div key={i} style={{
+                      flex:1, textAlign:"center",
+                      borderRight: i<2?`1px solid ${C.border}`:"none",
+                      padding:"0 6px",
+                    }}>
+                      <div style={{color:item.color,fontSize:11,fontWeight:item.fw,lineHeight:1.3}}>{item.val||"―"}</div>
+                    </div>
+                  ))}
+                  {ageStr!=="―"&&<span style={{color:C.textDim,fontSize:10,flexShrink:0,paddingLeft:8,borderLeft:`1px solid ${C.border}`}}>{ageStr}</span>}
                 </div>
 
                 {/* 肥育中：体重・DG・導入金額 */}
