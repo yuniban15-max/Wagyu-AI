@@ -1873,7 +1873,7 @@ export default function App() {
         </div>
 
         {/* 並び替え */}
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,paddingLeft:16,paddingRight:16,marginBottom:12,scrollbarWidth:"none",justifyContent:"flex-end"}}>
+          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,paddingLeft:16,paddingRight:16,marginBottom:12,scrollbarWidth:"none"}}>
             {[
               {key:"head",   label:"🐂 頭数"},
               {key:"dg",     label:"📈 DG"},
@@ -1881,9 +1881,9 @@ export default function App() {
               {key:"profit", label:"💴 損益"},
             ].map(({key,label})=>(
               <button key={key} onClick={()=>setSortMode(key)} style={{
-                background: sortMode===key?`linear-gradient(135deg,${levelColor},${levelColor}cc)`:"#fff",
+                background: sortMode===key?`linear-gradient(135deg,${C.accent},${C.accentDark})`:"#fff",
                 color:       sortMode===key?"#fff":C.textMid,
-                border:`1.5px solid ${sortMode===key?levelColor:C.border}`,
+                border:`1.5px solid ${sortMode===key?C.accent:C.border}`,
                 borderRadius:20, padding:"6px 14px",
                 fontSize:11, fontWeight:700, cursor:"pointer",
                 whiteSpace:"nowrap", flexShrink:0,
