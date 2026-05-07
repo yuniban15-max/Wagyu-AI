@@ -3290,18 +3290,30 @@ JSONのみ返してください。`;
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <FInput label="耳標番号">
-                      <input value={a.tag} onChange={e=>updateAnimal(i,x=>({...x,tag:e.target.value}))} placeholder="例: 宮崎-0099" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
+                      <input value={a.tag||""} onChange={e=>updateAnimal(i,x=>({...x,tag:e.target.value}))} placeholder="例: 0325400001" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
                     </FInput>
                     <FInput label="購入価格（円）">
-                      <input type="number" value={a.purchasePrice||""} onChange={e=>updateAnimal(i,x=>({...x,purchasePrice:Number(e.target.value)||0}))} placeholder="例: 820000" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
+                      <input type="number"
+                        value={a.costs?.purchasePrice||a.purchasePrice||""}
+                        onChange={e=>{const v=Number(e.target.value)||0; updateAnimal(i,x=>({...x,purchasePrice:v,costs:{...(x.costs||{}),purchasePrice:v}}));}}
+                        placeholder="例: 820000" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
                     </FInput>
-                    <FInput label="牛名">
-                      <input value={a.name} onChange={e=>updateAnimal(i,x=>({...x,name:e.target.value}))} placeholder="任意" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
+                    <FInput label="繁殖農家名">
+                      <input value={a.name||""} onChange={e=>updateAnimal(i,x=>({...x,name:e.target.value}))} placeholder="例: 田中牧場" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
+                    </FInput>
+                    <FInput label="導入元市場">
+                      <input value={a.farm||""} onChange={e=>updateAnimal(i,x=>({...x,farm:e.target.value}))} placeholder="例: 宮崎中央市場" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
                     </FInput>
                     <FInput label="性別">
-                      <select value={a.sex} onChange={e=>updateAnimal(i,x=>({...x,sex:e.target.value}))} style={{...inp,fontSize:13,padding:"8px 10px"}}>
+                      <select value={a.sex||"去勢"} onChange={e=>updateAnimal(i,x=>({...x,sex:e.target.value}))} style={{...inp,fontSize:13,padding:"8px 10px"}}>
                         {["去勢","雌","雄"].map(s=><option key={s}>{s}</option>)}
                       </select>
+                    </FInput>
+                    <FInput label="導入体重（kg）">
+                      <input type="number"
+                        value={a.weights?.[0]?.weight||""}
+                        onChange={e=>{const v=Number(e.target.value)||0; updateAnimal(i,x=>({...x,weights:v?[{date:x.introDate||introDate,weight:v}]:[]}));}}
+                        placeholder="例: 285" style={{...inp,fontSize:13,padding:"8px 10px"}}/>
                     </FInput>
                   </div>
                 </Card>
