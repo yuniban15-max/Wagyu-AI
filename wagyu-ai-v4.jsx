@@ -2918,72 +2918,91 @@ JSONのみ返してください。`;
       setXlsxStatus("loading"); setXlsxMsg("");
       try {
         const buf = await file.arrayBuffer();
-        const wb  = XLSX.read(buf, {type:"array", cellDates:true});
+        const wb  = XLSX.read(buf, {type:"array", cellDates:true, raw:true});
         const ws  = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
 
-        // 1行目がヘッダー、2行目が入力例 → 3行目以降がデータ
         if(rows.length < 3){ throw new Error("データが3行目以降に入力されていません"); }
 
-        // ヘッダー行でカラムインデックスを特定
         const headers = (rows[0]||[]).map(h=>String(h||"").trim());
+
+        // 列インデックス取得
         const col = (name) => headers.indexOf(name);
 
-        const getValue = (row, name) => {
+        // 文字列取得
+        const getStr = (row, name) => {
           const i = col(name);
-          return i>=0 ? String(row[i]||"").trim() : "";
+          if(i<0 || row[i]==null) return "";
+          return String(row[i]).trim();
+        };
+
+        // 数値取得（数値型セルを直接使用）
+        const getNum = (row, name) => {
+          const i = col(name);
+          if(i<0 || row[i]==null) return 0;
+          const v = row[i];
+          if(typeof v === "number") return Math.round(v);
+          return Number(String(v).replace(/[^\d]/g,""))||0;
+        };
+
+        // 日付取得（DateオブジェクトまたはYYYY-MM-DD文字列）
+        const getDate = (row, name) => {
+          const i = col(name);
+          if(i<0 || row[i]==null) return "";
+          const v = row[i];
+          if(v instanceof Date) {
+            const y = v.getFullYear();
+            const m = String(v.getMonth()+1).padStart(2,"0");
+            const d = String(v.getDate()).padStart(2,"0");
+            return `${y}-${m}-${d}`;
+          }
+          const s = String(v).replace(/\//g,"-").replace(/\./g,"-");
+          const parts = s.split("-");
+          if(parts.length===3) return `${parts[0]}-${parts[1].padStart(2,"0")}-${parts[2].padStart(2,"0")}`;
+          return s;
         };
 
         const mapped = rows.slice(2).filter(row=>
-          row.some(c=>c!=null&&String(c).trim()!=="")
+          row && row.some(c=>c!=null&&String(c).trim()!=="")
         ).map((row, idx) => {
-          const tag = getValue(row,"耳標番号");
-          if(!tag) return null;
-
-          // 日付の正規化
-          const normalizeDate = (v) => {
-            if(!v) return "";
-            const s = String(v).replace(/\//g,"-").replace(/\./g,"-");
-            if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
-              const [y,m,d] = s.split("-");
-              return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-            }
-            return s;
-          };
+          const tagRaw = row[col("耳標番号")];
+          if(tagRaw==null) return null;
+          const tag = String(tagRaw).trim();
+          if(!tag || tag==="null") return null;
 
           return {
             id: `xl-${Date.now()}-${idx}`,
             tag,
-            name:          getValue(row,"繁殖農家名"),
-            farm:          getValue(row,"導入元市場"),
-            sex:           getValue(row,"性別")||"去勢",
-            breed:         getValue(row,"品種")||"黒毛和種",
-            birthDate:     normalizeDate(getValue(row,"生年月日")),
-            introDate:     normalizeDate(getValue(row,"導入日"))||new Date().toISOString().slice(0,10),
-            pen:           getValue(row,"牛舎・ペン"),
-            shippingPlan:  normalizeDate(getValue(row,"出荷予定日")),
-            expectedPrice: Number(getValue(row,"予想販売価格").replace(/[^\d]/g,""))||0,
-            memo:          getValue(row,"メモ"),
+            name:          getStr(row,"繁殖農家名"),
+            farm:          getStr(row,"導入元市場"),
+            sex:           getStr(row,"性別")||"去勢",
+            breed:         getStr(row,"品種")||"黒毛和種",
+            birthDate:     getDate(row,"生年月日"),
+            introDate:     getDate(row,"導入日")||new Date().toISOString().slice(0,10),
+            pen:           getStr(row,"牛舎・ペン"),
+            shippingPlan:  getDate(row,"出荷予定日"),
+            expectedPrice: getNum(row,"予想販売価格"),
+            memo:          getStr(row,"メモ"),
             status:        "肥育中",
             result:        null,
-            weights:       getValue(row,"導入体重") ? [{
-              date: normalizeDate(getValue(row,"導入日"))||new Date().toISOString().slice(0,10),
-              weight: Number(getValue(row,"導入体重"))||0,
+            weights: getNum(row,"導入体重") > 0 ? [{
+              date: getDate(row,"導入日")||new Date().toISOString().slice(0,10),
+              weight: getNum(row,"導入体重"),
             }] : [],
-            vaccines:      [],
-            treatments:    [],
+            vaccines:   [],
+            treatments: [],
             pedigree: {
-              sire:{ name:getValue(row,"父"),
-                sire:{ name:"", sire:{name:""}, dam:{name:""}},
-                dam: { name:"", sire:{name:""}, dam:{name:""}}},
-              dam: { name:getValue(row,"母"),
-                sire:{ name:getValue(row,"母の父"),  sire:{name:""}, dam:{name:""}},
-                dam: { name:"",
-                  sire:{ name:getValue(row,"母の母の父"), sire:{name:""}, dam:{name:""}},
-                  dam: { name:"", sire:{name:""}, dam:{name:""}}}},
+              sire:{ name:getStr(row,"父"),
+                sire:{name:"",sire:{name:""},dam:{name:""}},
+                dam: {name:"",sire:{name:""},dam:{name:""}}},
+              dam: { name:getStr(row,"母"),
+                sire:{name:getStr(row,"母の父"), sire:{name:""},dam:{name:""}},
+                dam: {name:"",
+                  sire:{name:getStr(row,"母の母の父"),sire:{name:""},dam:{name:""}},
+                  dam: {name:"",sire:{name:""},dam:{name:""}}}},
             },
             costs:{
-              purchasePrice:    Number(getValue(row,"購入価格").replace(/[^\d]/g,""))||0,
+              purchasePrice:    getNum(row,"購入価格"),
               roughageDaily:    settings.defaultCosts.roughageDaily,
               compoundKgPerDay: settings.defaultCosts.compoundKgPerDay,
               compoundKgPrice:  settings.defaultCosts.compoundKgPrice,
