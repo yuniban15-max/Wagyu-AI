@@ -3030,14 +3030,13 @@ JSONのみ返してください。`;
     const registerAll = () => {
       const newCattle = animals.map(a=>({
         ...a,
-        id: Date.now().toString()+Math.random(),
+        id: Date.now().toString(36)+Math.random().toString(36).slice(2),
         introDate: a.introDate || introDate,
-        farm:      a.farm || farm,        // Excelの導入元を優先
+        farm:      a.farm || farm,
         pen:       a.pen  || pen,
         status:"肥育中", result:null,
-        weights:[], vaccines:[], treatments:[],
+        vaccines:[], treatments:[],
         costs:{
-          // Excelから読み込んだ購入価格を優先
           purchasePrice:    a.costs?.purchasePrice || a.purchasePrice || 0,
           roughageDaily:    settings.defaultCosts.roughageDaily,
           compoundKgPerDay: settings.defaultCosts.compoundKgPerDay,
@@ -3048,6 +3047,10 @@ JSONのみ返してください。`;
         },
       }));
       setCattle(prev=>[...prev,...newCattle]);
+      // 一括保存（2000頭でも100頭ずつ効率よく保存）
+      if(typeof window.saveCattleBatch === "function") {
+        window.saveCattleBatch(newCattle).catch(e=>console.log("一括保存エラー:",e));
+      }
       setPage("home");
     };
 
