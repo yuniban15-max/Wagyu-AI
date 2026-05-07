@@ -3309,6 +3309,12 @@ JSONのみ返してください。`;
                         {["去勢","雌","雄"].map(s=><option key={s}>{s}</option>)}
                       </select>
                     </FInput>
+                    <FInput label="導入日">
+                      <input type="date"
+                        value={a.introDate||""}
+                        onChange={e=>updateAnimal(i,x=>({...x,introDate:e.target.value}))}
+                        style={{...inp,fontSize:13,padding:"8px 10px"}}/>
+                    </FInput>
                     <FInput label="導入体重（kg）">
                       <input type="number"
                         value={a.weights?.[0]?.weight||""}
