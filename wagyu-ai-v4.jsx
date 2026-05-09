@@ -696,6 +696,8 @@ export default function App() {
       farmName: "",
       farmId: "farm_" + Math.random().toString(36).slice(2,8),
       shippingMonths: 28,
+      fiscalStart: `${new Date().getFullYear()}-04-01`,
+      fiscalEnd:   `${new Date().getFullYear()+1}-03-31`,
       defaultCosts:{ roughageDaily:400, compoundKgPerDay:8, compoundKgPrice:80, otherDaily:200, fixedOther:30000 },
     };
   });
@@ -821,13 +823,34 @@ export default function App() {
   },[cattle]);
 
   // 血統レベル別集計（1=父, 2=父の父, 3=父の父の父）
-  const buildLineageData = (level) => {
+  const buildLineageData = (level, shippedOnly=false) => {
     const getKey = (c) => {
       if(level===1) return c.pedigree?.sire?.name;
-      if(level===2) return c.pedigree?.dam?.sire?.name;   // 母の父
-      if(level===3) return c.pedigree?.dam?.dam?.sire?.name; // 母の母の父
+      if(level===2) return c.pedigree?.dam?.sire?.name;
+      if(level===3) return c.pedigree?.dam?.dam?.sire?.name;
       return null;
     };
+    const src = shippedOnly ? cattle.filter(c=>c.status==="出荷済") : cattle;
+    const map = {};
+    src.forEach(c=>{
+      const k = getKey(c);
+      if(!k) return;
+      if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],cows:[]};
+      map[k].head++;
+      if(c.result?.dg)      map[k].dgList.push(c.result.dg);
+      if(c.result?.bms)     map[k].bmsList.push(c.result.bms);
+      if(c.result?.loinArea)map[k].loinList.push(c.result.loinArea);
+      const p=calcCosts(c).profit; if(p!=null)map[k].profits.push(p);
+      map[k].cows.push(c);
+    });
+    return Object.values(map).map(s=>({
+      ...s,
+      avgDG:     avg(s.dgList),
+      avgBMS:    avg(s.bmsList),
+      avgLoin:   avg(s.loinList),
+      avgProfit: avg(s.profits),
+    }));
+  };
     const map={};
     cattle.forEach(c=>{
       const key=getKey(c)||"不明";
@@ -929,6 +952,14 @@ export default function App() {
               <input type="number" value={loc.shippingMonths||28} onChange={e=>sf("shippingMonths",Number(e.target.value)||28)} placeholder="28" style={inp}/>
               <div style={{color:C.textDim,fontSize:10,marginTop:3}}>個体一覧の出荷予定月齢表示に使用します</div>
             </div>
+            <div style={{marginBottom:8}}>
+              <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>今期 開始日</div>
+              <input type="date" value={loc.fiscalStart||""} onChange={e=>sf("fiscalStart",e.target.value)} style={inp}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{color:C.textMid,fontSize:12,fontWeight:600,marginBottom:5}}>今期 終了日</div>
+              <input type="date" value={loc.fiscalEnd||""} onChange={e=>sf("fiscalEnd",e.target.value)} style={inp}/>
+            </div>
             <div style={{color:C.textDim,fontSize:11}}>⚠️ 全スマホで同じIDにしてください</div>
           </div>
 
@@ -1008,13 +1039,22 @@ export default function App() {
       : `${now.getFullYear()}-03`;
 
     const active      = cattle.filter(c => c.status === "肥育中");
-    const soon30      = active.filter(c => { const d=daysUntil(c.shippingPlan); return d!==null&&d<=30; });
-    const vaxSoon     = cattle.flatMap(c => c.vaccines.filter(v=>v.nextDate).map(v=>({cow:c,v,days:daysUntil(v.nextDate)}))).filter(x=>x.days!==null&&x.days<=30);
-    const has30       = soon30.length > 0;
-    const hasVax      = vaxSoon.length > 0;
 
-    // 導入総額（肥育中のみ）
-    const activePurchaseTotal = active.reduce((s,c) => s+(c.costs?.purchasePrice||0), 0);
+    // 目標月齢ベースの出荷アラート（生年月日から計算）
+    const targetM = settings.shippingMonths || 28;
+    const ageMonths = (c) => c.birthDate ? Math.floor((Date.now()-new Date(c.birthDate))/(30.44*86400000)) : null;
+    const soon30  = active.filter(c => { const a=ageMonths(c); return a!=null && a >= targetM-1; });
+    const soon90  = active.filter(c => { const a=ageMonths(c); return a!=null && a >= targetM-3; });
+
+    const vaxSoon = cattle.flatMap(c => c.vaccines.filter(v=>v.nextDate).map(v=>({cow:c,v,days:daysUntil(v.nextDate)}))).filter(x=>x.days!==null&&x.days<=30);
+    const has30   = soon30.length > 0;
+    const hasVax  = vaxSoon.length > 0;
+
+    // 今期導入総額（fiscalStart〜fiscalEnd の間に導入した牛）
+    const fs = settings.fiscalStart || `${now.getFullYear()}-04-01`;
+    const fe = settings.fiscalEnd   || `${now.getFullYear()+1}-03-31`;
+    const fiscalCattleIntro = cattle.filter(c => c.introDate && c.introDate >= fs && c.introDate <= fe);
+    const fiscalPurchaseTotal = fiscalCattleIntro.reduce((s,c)=>s+(c.costs?.purchasePrice||0),0);
 
     // 今月の利益：shippingPlan が今月の個体の損益合計
     const thisMonthCows   = cattle.filter(c => c.shippingPlan?.startsWith(thisYM));
@@ -1039,20 +1079,17 @@ export default function App() {
 
           {/* KPI 3行 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {/* 行1: 肥育中 ／ 導入総額（肥育中） */}
+            {/* 行1: 肥育中 ／ 今期導入総額 */}
             <KpiCard label="肥育中" value={active.length} unit="頭"
-              icon="🐂"
-              color={C.accent} bg={C.accentLight}/>
-            <KpiCard label="導入総額（肥育中）" value={fmtM(activePurchaseTotal)} icon="💴"
+              icon="🐂" color={C.accent} bg={C.accentLight}/>
+            <KpiCard label="今期導入総額" value={fmtM(fiscalPurchaseTotal)} icon="💴"
               color={C.accentDark} bg={C.accentLight}/>
 
-            {/* 行2: 出荷30日以内 ／ 出荷90日以内 */}
-            <KpiCard label="出荷30日以内" value={soon30.length} unit="頭" icon="🚚"
+            {/* 行2: 目標月齢1ヶ月前 ／ 3ヶ月前 */}
+            <KpiCard label={`目標月齢1ヶ月前（${targetM-1}ヶ月〜）`} value={soon30.length} unit="頭" icon="🚚"
               color={soon30.length>0?C.red:C.textDim}
               bg   ={soon30.length>0?C.redLight:C.cardSub}/>
-            <KpiCard label="出荷90日以内"
-              value={active.filter(c=>{const d=daysUntil(c.shippingPlan);return d!==null&&d<=90;}).length}
-              unit="頭" icon="📅"
+            <KpiCard label={`目標月齢3ヶ月前（${targetM-3}ヶ月〜）`} value={soon90.length} unit="頭" icon="📅"
               color={C.amber} bg={C.amberLight}/>
 
             {/* 行3: 今月の利益 ／ 今期の利益 */}
@@ -1565,46 +1602,104 @@ export default function App() {
   // ── SCHEDULE ───────────────────────────────────────────────────────────────
   const ScheduleScreen = () => {
     const [selMonth,setSelMonth]=useState(null);
+
+    // 出荷予定月を計算（shippingPlan or birthDate+目標月齢）
+    const getShipMonth = (c) => {
+      if(c.shippingPlan) return c.shippingPlan.slice(0,7);
+      if(c.birthDate) {
+        const d = new Date(c.birthDate);
+        d.setMonth(d.getMonth() + (settings.shippingMonths||28));
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      }
+      return null;
+    };
+
+    // 月別集計（出荷済み除く、死亡除く）
+    const monthlyData = useMemo(()=>{
+      const map = {};
+      cattle.filter(c=>c.status!=="出荷済"&&c.status!=="死亡").forEach(c=>{
+        const m = getShipMonth(c);
+        if(!m) return;
+        if(!map[m]) map[m]={month:m,head:0,revenue:0,profit:0,cows:[]};
+        map[m].head++;
+        map[m].revenue += c.expectedPrice||0;
+        map[m].profit  += calcCosts(c).profit??0;
+        map[m].cows.push(c);
+      });
+      return Object.values(map).sort((a,b)=>a.month.localeCompare(b.month)).slice(0,24);
+    },[cattle, settings.shippingMonths]);
+
     const totalRev=monthlyData.reduce((s,m)=>s+m.revenue,0);
     const totalHead=monthlyData.reduce((s,m)=>s+m.head,0);
     const totalProfit=monthlyData.reduce((s,m)=>s+m.profit,0);
+
+    // 年月を「2026年12月」に変換
+    const fmtMonth = (ym) => {
+      const [y,m]=ym.split("-");
+      return `${y}年${Number(m)}月`;
+    };
+
+    // 今月・今期ハイライト
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
     return (
       <div style={{paddingBottom:90}}>
-        <AppHeader subtitle="月別出荷・売上予定"/>
+        <AppHeader subtitle="出荷予定"/>
         <div style={{padding:"16px 16px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
-            <KpiCard label="出荷合計" value={`${totalHead}頭`} icon="🐄" color={C.accent} bg={C.accentLight}/>
+            <KpiCard label="出荷予定" value={`${totalHead}頭`} icon="🐄" color={C.accent} bg={C.accentLight}/>
             <KpiCard label="予定売上" value={fmtM(totalRev)} icon="💴" color={C.amber} bg={C.amberLight}/>
             <KpiCard label="予想利益" value={fmtM(totalProfit)} icon="📊" color={totalProfit>=0?C.green:C.red} bg={totalProfit>=0?C.greenLight:C.redLight}/>
           </div>
-          <SectionLabel>月別詳細（タップで個体一覧）</SectionLabel>
+
+          <SectionLabel>月別出荷予定（タップで個体一覧）</SectionLabel>
           {monthlyData.map(m=>{
             const open=selMonth===m.month;
+            const isThisMonth = m.month===thisMonth;
             return (
               <div key={m.month} style={{marginBottom:10}}>
-                <div onClick={()=>setSelMonth(open?null:m.month)} style={{background:open?C.accentLight:"#fff",border:`1.5px solid ${open?C.accent:C.border}`,borderRadius:16,padding:"14px 16px",cursor:"pointer",boxShadow:open?`0 4px 20px ${C.accent}22`:C.shadow}}>
+                <div onClick={()=>setSelMonth(open?null:m.month)} style={{
+                  background:open?C.accentLight:isThisMonth?"#fffbe6":"#fff",
+                  border:`1.5px solid ${open?C.accent:isThisMonth?C.amber:C.border}`,
+                  borderRadius:16,padding:"14px 16px",cursor:"pointer",
+                  boxShadow:open?`0 4px 20px ${C.accent}22`:C.shadow,
+                }}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <span style={{color:C.text,fontWeight:800,fontSize:16}}>{m.month.replace("-","年")}月</span>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}><Tag label={`${m.head}頭`} color={C.accent}/><span style={{color:C.textDim}}>{open?"▲":"▼"}</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {isThisMonth&&<span style={{background:C.amber,color:"#fff",borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:700}}>今月</span>}
+                      <span style={{color:C.text,fontWeight:800,fontSize:16}}>{fmtMonth(m.month)}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <Tag label={`${m.head}頭`} color={C.accent}/>
+                      <span style={{color:C.textDim}}>{open?"▲":"▼"}</span>
+                    </div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {[{label:"予定売上",val:fmtM(m.revenue),color:C.amber,bg:C.amberLight},{label:"予想利益",val:fmtM(m.profit),color:m.profit>=0?C.green:C.red,bg:m.profit>=0?C.greenLight:C.redLight}].map(({label,val,color,bg})=>(
-                      <div key={label} style={{background:bg,borderRadius:10,padding:"8px 12px"}}><div style={{color:C.textDim,fontSize:10,marginBottom:2}}>{label}</div><div style={{color,fontSize:15,fontWeight:800}}>{val}</div></div>
+                      <div key={label} style={{background:bg,borderRadius:10,padding:"8px 12px"}}>
+                        <div style={{color:C.textDim,fontSize:10,marginBottom:2}}>{label}</div>
+                        <div style={{color,fontSize:15,fontWeight:800}}>{val}</div>
+                      </div>
                     ))}
                   </div>
                   {open&&(
                     <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
                       {m.cows.map(c=>{
-                        const du=daysUntil(c.shippingPlan);
+                        const shipM = getShipMonth(c);
+                        const ageM = c.birthDate ? Math.floor((Date.now()-new Date(c.birthDate))/(30.44*86400000)) : null;
                         return (
                           <div key={c.id} onClick={e=>{e.stopPropagation();goDetail(c.id);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",marginBottom:6,cursor:"pointer",boxShadow:C.shadow}}>
                             <div>
-                              <span style={{color:C.accent,fontWeight:800,marginRight:8,fontFamily:"monospace",fontSize:12}}>{c.tag}</span>
-                              <span style={{color:C.text,fontSize:13,fontWeight:600}}>{c.name}</span>
+                              <TagDisplay tag={c.tag} size={11} highlightSize={14} color={C.accent}/>
+                              <div style={{color:C.textDim,fontSize:11,marginTop:2}}>
+                                {ageM!=null&&`${ageM}ヶ月`}
+                                {c.pedigree?.sire?.name&&` ／ ${c.pedigree.sire.name}`}
+                              </div>
                             </div>
                             <div style={{textAlign:"right"}}>
-                              <div style={{color:C.amber,fontSize:13,fontWeight:700}}>{fmtM(c.result?.sellPrice||c.expectedPrice)}</div>
-                              {du!==null&&<div style={{color:du<=30?C.red:C.textDim,fontSize:10}}>あと{du}日</div>}
+                              <div style={{color:C.amber,fontSize:13,fontWeight:700}}>{fmtM(c.expectedPrice)}</div>
+                              <div style={{color:C.textDim,fontSize:10}}>{fmtMonth(shipM)}</div>
                             </div>
                           </div>
                         );
@@ -1615,7 +1710,7 @@ export default function App() {
               </div>
             );
           })}
-          {!monthlyData.length&&<Card><div style={{color:C.textDim,textAlign:"center",padding:24,fontSize:13}}>出荷予定日が設定されている個体がいません</div></Card>}
+          {!monthlyData.length&&<Card><div style={{color:C.textDim,textAlign:"center",padding:24,fontSize:13}}>出荷予定の個体がいません</div></Card>}
         </div>
       </div>
     );
@@ -1625,7 +1720,8 @@ export default function App() {
   const BreederScreen = () => {
     const [selBreeder, setSelBreeder] = useState(null);
     const [sortMode,   setSortMode]   = useState("head");
-    const [farmFilter, setFarmFilter] = useState("all"); // 導入元フィルター
+    const [farmFilter, setFarmFilter] = useState("all");
+    const [shippedOnly,setShippedOnly]= useState(false);
 
     // 導入元の一覧
     const farmList = useMemo(()=>{
@@ -1634,20 +1730,23 @@ export default function App() {
     },[cattle]);
 
     const breederData = useMemo(()=>{
-      const filtered = farmFilter==="all" ? cattle : cattle.filter(c=>(c.farm||"不明")===farmFilter);
+      let src = farmFilter==="all" ? cattle : cattle.filter(c=>(c.farm||"不明")===farmFilter);
+      if(shippedOnly) src = src.filter(c=>c.status==="出荷済");
       const map = {};
-      filtered.forEach(c=>{
+      src.forEach(c=>{
         const key = c.name || "不明";
-        if(!map[key]) map[key]={breeder:key, head:0, dgs:[], bmsList:[], loinList:[], profits:[], cows:[]};
+        if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], cows:[]};
         map[key].head++;
-        const d = calcDG(c.weights); if(d) map[key].dgs.push(d);
-        if(c.result?.bms)      map[key].bmsList.push(c.result.bms);
+        if(c.status==="死亡") { map[key].deaths++; return; }
+        // 枝肉DG（出荷成績のdg）
+        if(c.result?.dg)     map[key].dgList.push(c.result.dg);
+        if(c.result?.bms)    map[key].bmsList.push(c.result.bms);
         if(c.result?.loinArea) map[key].loinList.push(c.result.loinArea);
         const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
         map[key].cows.push(c);
       });
       const list = Object.values(map).map(s=>({
-        ...s, avgDG:avg(s.dgs), avgBMS:avg(s.bmsList), avgLoin:avg(s.loinList), avgProfit:avg(s.profits),
+        ...s, avgDG:avg(s.dgList), avgBMS:avg(s.bmsList), avgLoin:avg(s.loinList), avgProfit:avg(s.profits),
       }));
       return list.sort((a,b)=>{
         if(sortMode==="head")   return b.head-a.head;
@@ -1656,7 +1755,7 @@ export default function App() {
         if(sortMode==="profit") return (b.avgProfit??-Infinity)-(a.avgProfit??-Infinity);
         return 0;
       });
-    },[cattle, sortMode, farmFilter]);
+    },[cattle, sortMode, farmFilter, shippedOnly]);
 
     const bc = "#e06040";
 
@@ -1684,11 +1783,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* 並び替え */}
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:12,scrollbarWidth:"none"}}>
+          {/* 並び替え＋出荷済みフィルター */}
+          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:8,scrollbarWidth:"none"}}>
+            <button onClick={()=>setShippedOnly(v=>!v)} style={{
+              background: shippedOnly?`linear-gradient(135deg,${C.green},#1a8a4a)`:"#fff",
+              color: shippedOnly?"#fff":C.textMid,
+              border:`1.5px solid ${shippedOnly?C.green:C.border}`,
+              borderRadius:20, padding:"6px 14px",
+              fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
+            }}>✅ 出荷済みのみ</button>
             {[
               {key:"head",   label:"🐂 頭数"},
-              {key:"dg",     label:"📈 DG"},
+              {key:"dg",     label:"📈 枝肉DG"},
               {key:"bms",    label:"🥩 BMS"},
               {key:"profit", label:"💴 損益"},
             ].map(({key,label})=>(
@@ -1725,14 +1831,17 @@ export default function App() {
                       <div style={{width:32,height:32,borderRadius:10,background:open?bc:C.cardSub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🏡</div>
                       <div>
                         <div style={{color:open?bc:C.text,fontWeight:900,fontSize:14}}>{s.breeder}</div>
-                        <div style={{color:C.textDim,fontSize:11}}>{s.head}頭</div>
+                        <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2}}>
+                          <div style={{color:C.textDim,fontSize:11}}>{s.head}頭</div>
+                          {s.deaths>0&&<span style={{background:"#f5f0ff",color:"#7030a0",borderRadius:6,padding:"1px 7px",fontSize:10,fontWeight:700}}>💀 死亡 {s.deaths}頭</span>}
+                        </div>
                       </div>
                     </div>
                     <span style={{color:C.textDim,fontSize:16}}>{open?"▲":"▼"}</span>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {[
-                      {label:"平均DG",   val:s.avgDG   ?`${s.avgDG.toFixed(2)} kg/日`:null, color:C.accent,    bg:C.accentLight},
+                      {label:"平均枝肉DG",val:s.avgDG   ?`${s.avgDG.toFixed(3)} kg/日`:null, color:C.accent,    bg:C.accentLight},
                       {label:"平均BMS",  val:s.avgBMS  ?`${s.avgBMS.toFixed(1)}`:null,       color:C.red,       bg:C.redLight},
                       {label:"ロース芯", val:s.avgLoin ?`${s.avgLoin.toFixed(1)} cm²`:null,  color:C.accentDark,bg:C.accentLight},
                       {label:"平均損益", val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(s.avgProfit):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
@@ -1786,9 +1895,10 @@ export default function App() {
     const [genLevel, setGenLevel] = useState(1);
     const [selSire,  setSelSire]  = useState(null);
     const [sortMode, setSortMode] = useState("head");
+    const [shippedOnly,setShippedOnly] = useState(false);
 
     const data = useMemo(()=>{
-      const list = buildLineageData(genLevel);
+      const list = buildLineageData(genLevel, shippedOnly);
       return list.sort((a,b)=>{
         if(sortMode==="head")   return b.head-a.head;
         if(sortMode==="dg")     return (b.avgDG??-Infinity)-(a.avgDG??-Infinity);
@@ -1796,7 +1906,7 @@ export default function App() {
         if(sortMode==="profit") return (b.avgProfit??-Infinity)-(a.avgProfit??-Infinity);
         return 0;
       });
-    },[genLevel, sortMode, cattle]);
+    },[genLevel, sortMode, cattle, shippedOnly]);
 
     const levelLabel = genLevel===1?"父（一代祖）":genLevel===2?"母の父（二代祖）":"母の母の父（三代祖）";
     const levelColor = genLevel===1?C.purple:genLevel===2?"#7b5ea7":"#5a3e8a";
@@ -1829,7 +1939,7 @@ export default function App() {
           {/* 成績グリッド */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:s.avgProfit!=null?10:0}}>
             {[
-              {label:"平均 DG",   val:s.avgDG   ?`${s.avgDG.toFixed(2)} kg/日`:null, color:C.accent,  bg:C.accentLight},
+              {label:"平均枝肉DG", val:s.avgDG   ?`${s.avgDG.toFixed(3)} kg/日`:null, color:C.accent,  bg:C.accentLight},
               {label:"平均 BMS",  val:s.avgBMS  ?`${s.avgBMS.toFixed(1)}`:null,       color:C.red,     bg:C.redLight},
               {label:"ロース芯",  val:s.avgLoin ?`${s.avgLoin.toFixed(1)} cm²`:null,  color:C.accentDark,bg:C.accentLight},
               {label:"平均損益",  val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(s.avgProfit):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
@@ -1922,11 +2032,18 @@ export default function App() {
           ))}
         </div>
 
-        {/* 並び替え */}
+        {/* 並び替え＋出荷済みフィルター */}
           <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,paddingLeft:16,paddingRight:16,marginBottom:12,scrollbarWidth:"none"}}>
+            <button onClick={()=>setShippedOnly(v=>!v)} style={{
+              background: shippedOnly?`linear-gradient(135deg,${C.green},#1a8a4a)`:"#fff",
+              color: shippedOnly?"#fff":C.textMid,
+              border:`1.5px solid ${shippedOnly?C.green:C.border}`,
+              borderRadius:20, padding:"6px 14px",
+              fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
+            }}>✅ 出荷済みのみ</button>
             {[
               {key:"head",   label:"🐂 頭数"},
-              {key:"dg",     label:"📈 DG"},
+              {key:"dg",     label:"📈 枝肉DG"},
               {key:"bms",    label:"🥩 BMS"},
               {key:"profit", label:"💴 損益"},
             ].map(({key,label})=>(
@@ -2070,6 +2187,7 @@ export default function App() {
     // ── 編集・削除state ──────────────────────────────────────────────────────
     const [showEdit,      setShowEdit]      = useState(false);
     const [showDelConfirm,setShowDelConfirm] = useState(false);
+    const [showDeathConfirm,setShowDeathConfirm] = useState(false);
     const [editForm,      setEditForm]      = useState(null);
 
     const openEdit = () => {
@@ -2129,8 +2247,9 @@ export default function App() {
               <TagDisplay tag={cow.tag} size={14} highlightSize={19} color={C.accent}/>
               <span style={{color:C.text,fontWeight:800,fontSize:16,marginLeft:8}}>{cow.name}</span>
             </div>
-            {/* 編集・削除ボタン */}
+            {/* 編集・死亡・削除ボタン */}
             <button onClick={openEdit} style={{background:C.accentLight,border:`1px solid ${C.border}`,color:C.accentDark,borderRadius:10,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✏️ 編集</button>
+            {cow.status!=="死亡"&&<button onClick={()=>setShowDeathConfirm(true)} style={{background:"#f5f0ff",border:`1px solid #c0a0e0`,color:"#7030a0",borderRadius:10,padding:"6px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}}>💀</button>}
             <button onClick={()=>setShowDelConfirm(true)} style={{background:C.redLight,border:`1px solid ${C.red}44`,color:C.red,borderRadius:10,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗑️</button>
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -2145,7 +2264,7 @@ export default function App() {
 
         {/* Sub tabs */}
         <div style={{background:"#fff",borderBottom:`1px solid ${C.border}`,padding:"10px 14px",display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none"}}>
-          {[["info","📋 基本"],["pedigree","🧬 血統"],["weight","⚖️ 体重"],["health","💉 衛生"],["costs","💴 損益"],["result","🏆 実績"]].map(([k,v])=>(
+          {[["info","📋 基本"],["pedigree","🧬 血統"],["weight","📊 出荷成績"],["health","💉 衛生"],["costs","💴 損益"],["result","🏆 実績"]].map(([k,v])=>(
             <button key={k} onClick={()=>setDetailTab(k)} style={{background:detailTab===k?`linear-gradient(135deg,${C.accent},${C.accentDark})`:"transparent",color:detailTab===k?"#fff":C.textMid,border:detailTab===k?"none":`1px solid ${C.border}`,borderRadius:20,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,boxShadow:detailTab===k?C.shadow:"none"}}>
               {v}
             </button>
@@ -2207,25 +2326,49 @@ export default function App() {
           {/* WEIGHT */}
           {detailTab==="weight"&&(
             <>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-                <KpiCard label="最新体重" value={latestWeight(cow.weights)?`${latestWeight(cow.weights)}`:"―"} unit="kg" icon="⚖️" color={C.accent} bg={C.accentLight}/>
-                <KpiCard label="DG実績" value={dg?`+${dg.toFixed(2)}`:"―"} unit="kg/日" icon="📈" color={C.amber} bg={C.amberLight}/>
-                <KpiCard label="出荷予測" value={pred?`${pred}`:"―"} unit="kg" icon="🎯" color={C.amber} bg={C.amberLight}/>
-              </div>
-              <Card style={{marginBottom:14}}>
-                <div style={{color:C.textDim,fontSize:11,marginBottom:10}}>発育グラフ{pred&&<span style={{color:C.amber}}>　★ = DG予測体重</span>}</div>
-                <WeightChart weights={cow.weights} shippingPlan={cow.shippingPlan} dg={dg}/>
-              </Card>
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                <Btn sm variant="soft" onClick={()=>{setWForm({date:new Date().toISOString().slice(0,10),weight:""});setModal("weight");}}>＋ 体重記録</Btn>
-              </div>
-              {cow.weights.slice().reverse().map((w,i)=>(
-                <Card key={i} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px"}}>
-                  <span style={{color:C.textMid,fontSize:13}}>{fmtDate(w.date)}</span>
-                  <span style={{color:C.accent,fontWeight:800,fontSize:17}}>{w.weight} kg</span>
-                </Card>
-              ))}
-              {!cow.weights.length&&<div style={{color:C.textDim,textAlign:"center",padding:"24px 0",fontSize:13}}>体重記録がありません</div>}
+              {/* 枝肉DG計算 */}
+              {(()=>{
+                const cw = cow.result?.coldWeight;
+                const bd = cow.birthDate;
+                const sd = cow.result?.shippingDate || cow.shippingPlan;
+                const shipDays = (bd && sd) ? Math.floor((new Date(sd)-new Date(bd))/86400000) : null;
+                const calcEngiDG = (cw && shipDays && shipDays>0) ? (cw/shipDays).toFixed(3) : null;
+                const bms = cow.result?.bms;
+
+                return (
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                      <KpiCard label="枝肉重量" value={cw?`${cw}`:"―"} unit="kg" icon="⚖️" color={C.accent} bg={C.accentLight}/>
+                      <KpiCard label="枝肉DG" value={calcEngiDG||cow.result?.dg||"―"} unit="kg/日" icon="📈" color={C.amber} bg={C.amberLight}/>
+                      <KpiCard label="BMS" value={bms!=null?`${bms}`:"―"} unit="" icon="🥩" color={C.red} bg={C.redLight}/>
+                      <KpiCard label="等級" value={cow.result?.grade||"―"} unit="" icon="🏆" color={C.green} bg={C.greenLight}/>
+                    </div>
+
+                    {cow.result ? (
+                      <Card style={{marginBottom:12}}>
+                        <SectionLabel>出荷成績詳細</SectionLabel>
+                        {cw&&shipDays&&<InfoRow label="出荷時月齢" value={`${Math.round(shipDays/30.44)}ヶ月`}/>}
+                        <InfoRow label="枝肉重量" value={cw?`${cw} kg`:"―"}/>
+                        <InfoRow label="枝肉DG" value={calcEngiDG?`${calcEngiDG} kg/日`:cow.result.dg?`${cow.result.dg} kg/日`:"―"} accent/>
+                        <InfoRow label="BMS" value={bms!=null?`${bms}`:"―"} accent/>
+                        <InfoRow label="ロース芯面積" value={cow.result.loinArea?`${cow.result.loinArea} cm²`:"―"}/>
+                        <InfoRow label="バラ厚" value={cow.result.ribThickness?`${cow.result.ribThickness} cm`:"―"}/>
+                        <InfoRow label="歩留等級" value={cow.result.yieldGrade||"―"}/>
+                        <InfoRow label="販売価格" value={fmtMoney(cow.result.sellPrice)} accent big last/>
+                        <div style={{marginTop:12,textAlign:"right"}}>
+                          <Btn sm variant="soft" onClick={()=>{setRForm({sellPrice:cow.result.sellPrice||"",bms:cow.result.bms||"",loinArea:cow.result.loinArea||"",ribThickness:cow.result.ribThickness||"",yieldGrade:cow.result.yieldGrade||"A",grade:cow.result.grade||"A5",dg:cow.result.dg||"",coldWeight:cow.result.coldWeight||""});setModal("result");}}>✏️ 編集</Btn>
+                        </div>
+                      </Card>
+                    ) : (
+                      <Card style={{textAlign:"center",padding:"28px 16px"}}>
+                        <div style={{fontSize:36,marginBottom:10}}>📊</div>
+                        <div style={{color:C.textMid,fontSize:13,marginBottom:16}}>出荷成績が未入力です</div>
+                        <Btn onClick={()=>{setRForm({sellPrice:"",bms:"",loinArea:"",ribThickness:"",yieldGrade:"A",grade:"A5",dg:"",coldWeight:""});setModal("result");}}>＋ 出荷成績を入力</Btn>
+                      </Card>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
 
@@ -2346,15 +2489,37 @@ export default function App() {
           </Modal>
         )}
         {modal==="result"&&(
-          <Modal title="出荷実績を入力" onClose={()=>setModal(null)}>
+          <Modal title="出荷成績を入力" onClose={()=>setModal(null)}>
+            <FInput label="枝肉重量（kg）"><input type="number" placeholder="例: 430" value={rForm.coldWeight||""} onChange={e=>setRForm(p=>({...p,coldWeight:e.target.value}))} style={inp}/></FInput>
             <FInput label="販売価格（円）"><input type="number" placeholder="例: 1620000" value={rForm.sellPrice} onChange={e=>setRForm(p=>({...p,sellPrice:e.target.value}))} style={inp}/></FInput>
             <FInput label="BMS（1〜12）"><input type="number" min="1" max="12" placeholder="例: 9" value={rForm.bms} onChange={e=>setRForm(p=>({...p,bms:e.target.value}))} style={inp}/></FInput>
             <FInput label="等級"><select value={rForm.grade} onChange={e=>setRForm(p=>({...p,grade:e.target.value}))} style={inp}>{["A5","A4","A3","A2","A1","B5","B4","B3","B2","B1"].map(g=><option key={g}>{g}</option>)}</select></FInput>
             <FInput label="歩留等級"><select value={rForm.yieldGrade} onChange={e=>setRForm(p=>({...p,yieldGrade:e.target.value}))} style={inp}>{["A","B","C"].map(g=><option key={g}>{g}</option>)}</select></FInput>
             <FInput label="ロース芯面積（cm²）"><input type="number" placeholder="例: 62" value={rForm.loinArea} onChange={e=>setRForm(p=>({...p,loinArea:e.target.value}))} style={inp}/></FInput>
             <FInput label="バラ厚（cm）"><input type="number" step="0.1" placeholder="例: 8.2" value={rForm.ribThickness} onChange={e=>setRForm(p=>({...p,ribThickness:e.target.value}))} style={inp}/></FInput>
-            <FInput label="実績DG（kg/日）"><input type="number" step="0.01" placeholder="例: 0.97" value={rForm.dg} onChange={e=>setRForm(p=>({...p,dg:e.target.value}))} style={inp}/></FInput>
-            <Btn full onClick={()=>{update(cow.id,c=>({...c,status:"出荷済",result:{sellPrice:Number(rForm.sellPrice)||0,bms:Number(rForm.bms)||null,loinArea:Number(rForm.loinArea)||null,ribThickness:Number(rForm.ribThickness)||null,yieldGrade:rForm.yieldGrade,grade:rForm.grade,dg:Number(rForm.dg)||null}}));setModal(null);}}>登録する</Btn>
+            <Btn full onClick={()=>{
+              // 枝肉DG自動計算（枝肉重量÷出荷時日数）
+              const cw = Number(rForm.coldWeight)||null;
+              const bd = cow.birthDate;
+              const shipDate = new Date().toISOString().slice(0,10);
+              const shipDays = (cw && bd) ? Math.floor((new Date(shipDate)-new Date(bd))/86400000) : null;
+              const autoDG = (cw && shipDays && shipDays>0) ? Math.round(cw/shipDays*1000)/1000 : Number(rForm.dg)||null;
+              update(cow.id,c=>({...c,
+                status:"出荷済",
+                result:{
+                  sellPrice:    Number(rForm.sellPrice)||0,
+                  bms:          Number(rForm.bms)||null,
+                  loinArea:     Number(rForm.loinArea)||null,
+                  ribThickness: Number(rForm.ribThickness)||null,
+                  yieldGrade:   rForm.yieldGrade,
+                  grade:        rForm.grade,
+                  dg:           autoDG,
+                  coldWeight:   cw,
+                  shippingDate: shipDate,
+                },
+              }));
+              setModal(null);
+            }}>登録する</Btn>
           </Modal>
         )}
 
@@ -2469,6 +2634,30 @@ export default function App() {
           )}
 
           <Btn full onClick={saveEdit}>保存する</Btn>
+        </Modal>
+      )}
+
+      {/* ── 死亡確認モーダル ── */}
+      {showDeathConfirm&&(
+        <Modal title="💀 死亡登録" onClose={()=>setShowDeathConfirm(false)}>
+          <div style={{textAlign:"center",padding:"8px 0"}}>
+            <div style={{fontSize:40,marginBottom:12}}>💀</div>
+            <div style={{color:C.text,fontWeight:700,fontSize:16,marginBottom:8}}>{cow.tag}</div>
+            <div style={{color:C.textMid,fontSize:13,marginBottom:24,lineHeight:1.7}}>
+              この個体を死亡として登録します。<br/>
+              一覧から除外されますが<b>データは残ります</b>。
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <Btn full variant="outline" onClick={()=>setShowDeathConfirm(false)}>キャンセル</Btn>
+              <button onClick={()=>{
+                update(cow.id,c=>({...c,status:"死亡",deathDate:new Date().toISOString().slice(0,10)}));
+                setShowDeathConfirm(false);
+                setPage("home");
+              }} style={{flex:1,background:"#7030a0",color:"#fff",border:"none",borderRadius:12,padding:"11px 0",fontSize:14,fontWeight:800,cursor:"pointer"}}>
+                死亡登録する
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 
