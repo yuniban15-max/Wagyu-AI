@@ -851,22 +851,6 @@ export default function App() {
       avgProfit: avg(s.profits),
     }));
   };
-    const map={};
-    cattle.forEach(c=>{
-      const key=getKey(c)||"不明";
-      if(!map[key]) map[key]={sire:key,head:0,dgs:[],bmsList:[],loinList:[],profits:[],cows:[]};
-      map[key].head++;
-      const d=calcDG(c.weights); if(d) map[key].dgs.push(d);
-      if(c.result?.bms)      map[key].bmsList.push(c.result.bms);
-      if(c.result?.loinArea) map[key].loinList.push(c.result.loinArea);
-      const p=calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
-      map[key].cows.push(c);
-    });
-    return Object.values(map)
-      .map(s=>({...s,avgDG:avg(s.dgs),avgBMS:avg(s.bmsList),avgLoin:avg(s.loinList),avgProfit:avg(s.profits)}))
-      .sort((a,b)=>b.head-a.head);
-  };
-  const sireData = useMemo(()=>buildLineageData(1),[cattle]);
 
   const update = (id,fn) => setCattle(p=>p.map(c=>c.id===id?fn(c):c));
   const goDetail = (id) => { setSelectedId(id); setDetailTab("info"); setPage("detail"); };
