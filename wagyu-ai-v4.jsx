@@ -837,7 +837,7 @@ export default function App() {
       if(!k) return;
       if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],cows:[]};
       map[k].head++;
-      if(c.result?.dg)      map[k].dgList.push(c.result.dg);
+      if(c.result?.dg != null) map[k].dgList.push(Number(c.result.dg));
       if(c.result?.bms)     map[k].bmsList.push(c.result.bms);
       if(c.result?.loinArea)map[k].loinList.push(c.result.loinArea);
       const p=calcCosts(c).profit; if(p!=null)map[k].profits.push(p);
@@ -1723,7 +1723,7 @@ export default function App() {
         map[key].head++;
         if(c.status==="死亡") { map[key].deaths++; return; }
         // 枝肉DG（出荷成績のdg）
-        if(c.result?.dg)     map[key].dgList.push(c.result.dg);
+        if(c.result?.dg != null) map[key].dgList.push(Number(c.result.dg));
         if(c.result?.bms)    map[key].bmsList.push(c.result.bms);
         if(c.result?.loinArea) map[key].loinList.push(c.result.loinArea);
         const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
@@ -2482,12 +2482,14 @@ export default function App() {
             <FInput label="ロース芯面積（cm²）"><input type="number" placeholder="例: 62" value={rForm.loinArea} onChange={e=>setRForm(p=>({...p,loinArea:e.target.value}))} style={inp}/></FInput>
             <FInput label="バラ厚（cm）"><input type="number" step="0.1" placeholder="例: 8.2" value={rForm.ribThickness} onChange={e=>setRForm(p=>({...p,ribThickness:e.target.value}))} style={inp}/></FInput>
             <Btn full onClick={()=>{
-              // 枝肉DG自動計算（枝肉重量÷出荷時日数）
               const cw = Number(rForm.coldWeight)||null;
               const bd = cow.birthDate;
-              const shipDate = new Date().toISOString().slice(0,10);
+              // 出荷日: shippingPlanがあればそれ、なければ今日
+              const shipDate = cow.shippingPlan || new Date().toISOString().slice(0,10);
               const shipDays = (cw && bd) ? Math.floor((new Date(shipDate)-new Date(bd))/86400000) : null;
-              const autoDG = (cw && shipDays && shipDays>0) ? Math.round(cw/shipDays*1000)/1000 : Number(rForm.dg)||null;
+              const autoDG = (cw && shipDays && shipDays>0)
+                ? Math.round(cw/shipDays*1000)/1000
+                : Number(rForm.dg)||null;
               update(cow.id,c=>({...c,
                 status:"出荷済",
                 result:{
@@ -2702,19 +2704,35 @@ export default function App() {
 
         const arr = rows.slice(2).filter(row=>
           row.some(c=>c!=null&&String(c).trim()!=="")
-        ).map(row=>({
-          tag:          getValue(row,"耳標番号").replace(/[^0-9]/g,""),
-          shippingDate: normalizeDate(getValue(row,"出荷日")),
-          grade:        getValue(row,"等級")||null,
-          yieldGrade:   getValue(row,"歩留等級")||null,
-          bms:          Number(getValue(row,"BMS"))||null,
-          loinArea:     Number(getValue(row,"ロース芯面積"))||null,
-          ribThickness: Number(getValue(row,"バラ厚"))||null,
-          bft:          Number(getValue(row,"皮下脂肪厚"))||null,
-          coldWeight:   Number(getValue(row,"枝肉重量"))||null,
-          dg:           Number(getValue(row,"枝肉DG"))||null,
-          sellPrice:    Number(getValue(row,"販売金額").replace(/[^\d]/g,""))||null,
-        })).filter(r=>r.tag);
+        ).map(row=>{
+          const tag = getValue(row,"耳標番号").replace(/[^0-9]/g,"");
+          if(!tag) return null;
+          const shippingDate = normalizeDate(getValue(row,"出荷日"));
+          const coldWeight   = Number(getValue(row,"枝肉重量"))||null;
+          // 枝肉DG：Excel値があればそれを使い、なければ生年月日から自動計算
+          let dg = Number(getValue(row,"枝肉DG"))||null;
+          if(!dg && coldWeight && shippingDate) {
+            const matchedCow = cattle.find(c=>c.tag&&c.tag.replace(/[^0-9]/g,"")===tag);
+            const bd = matchedCow?.birthDate;
+            if(bd) {
+              const days = Math.floor((new Date(shippingDate)-new Date(bd))/86400000);
+              if(days>0) dg = Math.round(coldWeight/days*1000)/1000;
+            }
+          }
+          return {
+            tag,
+            shippingDate,
+            grade:        getValue(row,"等級")||null,
+            yieldGrade:   getValue(row,"歩留等級")||null,
+            bms:          Number(getValue(row,"BMS"))||null,
+            loinArea:     Number(getValue(row,"ロース芯面積"))||null,
+            ribThickness: Number(getValue(row,"バラ厚"))||null,
+            bft:          Number(getValue(row,"皮下脂肪厚"))||null,
+            coldWeight,
+            dg,
+            sellPrice:    Number(getValue(row,"販売金額").replace(/[^\d]/g,""))||null,
+          };
+        }).filter(Boolean).filter(r=>r.tag);
 
         if(arr.length===0) throw new Error("有効なデータが見つかりません");
 
