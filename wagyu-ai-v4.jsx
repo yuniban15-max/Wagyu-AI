@@ -110,14 +110,19 @@ const predictWeight = (cow) => {
 };
 const calcCosts = (cow) => {
   const c = cow.costs || {};
-  const days = daysSince(cow.introDate);
+  // 出荷済みは出荷日まで、肥育中は今日まで
+  const shipDate = cow.result?.shippingDate || cow.shippingPlan;
+  const days = (cow.status==="出荷済" && shipDate)
+    ? Math.max(0, Math.floor((new Date(shipDate)-new Date(cow.introDate||shipDate))/86400000))
+    : daysSince(cow.introDate);
   const compoundDaily = (c.compoundKgPerDay||0)*(c.compoundKgPrice||0);
   const dailyTotal = (c.roughageDaily||0)+compoundDaily+(c.otherDaily||0);
-  const runningCost = dailyTotal*days;
-  const totalCost = (c.purchasePrice||0)+runningCost+(c.fixedOther||0)+(c.vetCosts||0);
+  const runningCost = dailyTotal*(days||0);
+  // 利益 = 販売額 - 購入費 - 飼育コスト（固定費・治療費は含まない）
+  const totalCost = (c.purchasePrice||0)+runningCost;
   const sellPrice = cow.result?.sellPrice||cow.expectedPrice||null;
-  const profit = sellPrice ? sellPrice-totalCost : null;
-  return { compoundDaily, dailyTotal, runningCost, totalCost, profit };
+  const profit = sellPrice!=null && sellPrice>0 ? sellPrice-totalCost : null;
+  return { compoundDaily, dailyTotal, runningCost, totalCost, profit, days };
 };
 const monthKey = (d) => d ? d.slice(0,7) : null;
 const avg = (arr) => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
@@ -835,20 +840,29 @@ export default function App() {
     src.forEach(c=>{
       const k = getKey(c);
       if(!k) return;
-      if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],cows:[]};
+      if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],sellList:[],weightList:[],cows:[]};
       map[k].head++;
-      if(c.result?.dg != null) map[k].dgList.push(Number(c.result.dg));
-      if(c.result?.bms)     map[k].bmsList.push(c.result.bms);
-      if(c.result?.loinArea)map[k].loinList.push(c.result.loinArea);
-      const p=calcCosts(c).profit; if(p!=null)map[k].profits.push(p);
+      let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
+      if(!dg && c.result?.coldWeight && c.birthDate && c.result?.shippingDate) {
+        const days = Math.floor((new Date(c.result.shippingDate)-new Date(c.birthDate))/86400000);
+        if(days>0) dg = Math.round(c.result.coldWeight/days*1000)/1000;
+      }
+      if(dg) map[k].dgList.push(dg);
+      if(c.result?.bms!=null)    map[k].bmsList.push(Number(c.result.bms));
+      if(c.result?.loinArea)     map[k].loinList.push(c.result.loinArea);
+      if(c.result?.sellPrice)    map[k].sellList.push(c.result.sellPrice);
+      if(c.result?.coldWeight)   map[k].weightList.push(c.result.coldWeight);
+      const p=calcCosts(c).profit; if(p!=null) map[k].profits.push(p);
       map[k].cows.push(c);
     });
     return Object.values(map).map(s=>({
       ...s,
-      avgDG:     avg(s.dgList),
-      avgBMS:    avg(s.bmsList),
-      avgLoin:   avg(s.loinList),
-      avgProfit: avg(s.profits),
+      avgDG:        avg(s.dgList),
+      avgBMS:       avg(s.bmsList),
+      avgLoin:      avg(s.loinList),
+      avgProfit:    avg(s.profits),
+      avgSellPrice: avg(s.sellList),
+      avgColdWeight:avg(s.weightList),
     }));
   };
 
@@ -1719,18 +1733,30 @@ export default function App() {
       const map = {};
       src.forEach(c=>{
         const key = c.name || "不明";
-        if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], cows:[]};
+        if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], sellList:[], weightList:[], cows:[]};
         map[key].head++;
         if(c.status==="死亡") { map[key].deaths++; return; }
-        // 枝肉DG（出荷成績のdg）
-        if(c.result?.dg != null) map[key].dgList.push(Number(c.result.dg));
-        if(c.result?.bms)    map[key].bmsList.push(c.result.bms);
-        if(c.result?.loinArea) map[key].loinList.push(c.result.loinArea);
+        let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
+        if(!dg && c.result?.coldWeight && c.birthDate && c.result?.shippingDate) {
+          const d2 = Math.floor((new Date(c.result.shippingDate)-new Date(c.birthDate))/86400000);
+          if(d2>0) dg = Math.round(c.result.coldWeight/d2*1000)/1000;
+        }
+        if(dg) map[key].dgList.push(dg);
+        if(c.result?.bms!=null)    map[key].bmsList.push(Number(c.result.bms));
+        if(c.result?.loinArea)     map[key].loinList.push(c.result.loinArea);
+        if(c.result?.sellPrice)    map[key].sellList.push(c.result.sellPrice);
+        if(c.result?.coldWeight)   map[key].weightList.push(c.result.coldWeight);
         const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
         map[key].cows.push(c);
       });
       const list = Object.values(map).map(s=>({
-        ...s, avgDG:avg(s.dgList), avgBMS:avg(s.bmsList), avgLoin:avg(s.loinList), avgProfit:avg(s.profits),
+        ...s,
+        avgDG:         avg(s.dgList),
+        avgBMS:        avg(s.bmsList),
+        avgLoin:       avg(s.loinList),
+        avgProfit:     avg(s.profits),
+        avgSellPrice:  avg(s.sellList),
+        avgColdWeight: avg(s.weightList),
       }));
       return list.sort((a,b)=>{
         if(sortMode==="head")   return b.head-a.head;
@@ -1825,10 +1851,12 @@ export default function App() {
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {[
-                      {label:"平均枝肉DG",val:s.avgDG   ?`${s.avgDG.toFixed(3)} kg/日`:null, color:C.accent,    bg:C.accentLight},
-                      {label:"平均BMS",  val:s.avgBMS  ?`${s.avgBMS.toFixed(1)}`:null,       color:C.red,       bg:C.redLight},
-                      {label:"ロース芯", val:s.avgLoin ?`${s.avgLoin.toFixed(1)} cm²`:null,  color:C.accentDark,bg:C.accentLight},
-                      {label:"平均損益", val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(s.avgProfit):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
+                      {label:"平均枝肉DG",   val:s.avgDG         ?`${s.avgDG.toFixed(3)} kg/日`:null,         color:C.accent,    bg:C.accentLight},
+                      {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
+                      {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
+                      {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
+                      {label:"平均損益",     val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(Math.round(s.avgProfit)):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
+                      {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
                     ].map(({label,val,color,bg})=>(
                       <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
                         <div style={{color:C.textDim,fontSize:9,marginBottom:3}}>{label}</div>
@@ -1921,12 +1949,14 @@ export default function App() {
           </div>
 
           {/* 成績グリッド */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:s.avgProfit!=null?10:0}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
             {[
-              {label:"平均枝肉DG", val:s.avgDG   ?`${s.avgDG.toFixed(3)} kg/日`:null, color:C.accent,  bg:C.accentLight},
-              {label:"平均 BMS",  val:s.avgBMS  ?`${s.avgBMS.toFixed(1)}`:null,       color:C.red,     bg:C.redLight},
-              {label:"ロース芯",  val:s.avgLoin ?`${s.avgLoin.toFixed(1)} cm²`:null,  color:C.accentDark,bg:C.accentLight},
-              {label:"平均損益",  val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(s.avgProfit):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
+              {label:"平均枝肉DG",   val:s.avgDG         ?`${s.avgDG.toFixed(3)} kg/日`:null,         color:C.accent,    bg:C.accentLight},
+              {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
+              {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
+              {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
+              {label:"平均損益",     val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(Math.round(s.avgProfit)):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
+              {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
             ].map(({label,val,color,bg})=>(
               <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
                 <div style={{color:C.textDim,fontSize:9,marginBottom:3}}>{label}</div>
