@@ -1873,7 +1873,6 @@ export default function App() {
                       {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
                       {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
                       {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
-                      {label:"平均損益",     val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(Math.round(s.avgProfit)):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
                       {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
                     ].map(({label,val,color,bg})=>(
                       <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
@@ -1973,7 +1972,6 @@ export default function App() {
               {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
               {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
               {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
-              {label:"平均損益",     val:s.avgProfit!=null?(s.avgProfit>=0?"+":"")+fmtM(Math.round(s.avgProfit)):null, color:s.avgProfit>=0?C.green:C.red, bg:s.avgProfit>=0?C.greenLight:C.redLight},
               {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
             ].map(({label,val,color,bg})=>(
               <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
