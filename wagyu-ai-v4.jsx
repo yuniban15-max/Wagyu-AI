@@ -110,15 +110,19 @@ const predictWeight = (cow) => {
 };
 const calcCosts = (cow) => {
   const c = cow.costs || {};
-  // 出荷済みは出荷日まで、肥育中は今日まで
-  const shipDate = cow.result?.shippingDate || cow.shippingPlan;
-  const days = (cow.status==="出荷済" && shipDate)
-    ? Math.max(0, Math.floor((new Date(shipDate)-new Date(cow.introDate||shipDate))/86400000))
-    : daysSince(cow.introDate);
+  // 肥育日数：出荷済みは(出荷日-導入日)、肥育中は(今日-導入日)
+  const shipDate = cow.result?.shippingDate || (cow.status==="出荷済" ? cow.shippingPlan : null);
+  const introDate = cow.introDate;
+  let days = 0;
+  if(cow.status==="出荷済" && shipDate && introDate) {
+    days = Math.max(0, Math.floor((new Date(shipDate)-new Date(introDate))/86400000));
+  } else if(introDate) {
+    days = daysSince(introDate);
+  }
   const compoundDaily = (c.compoundKgPerDay||0)*(c.compoundKgPrice||0);
   const dailyTotal = (c.roughageDaily||0)+compoundDaily+(c.otherDaily||0);
-  const runningCost = dailyTotal*(days||0);
-  // 利益 = 販売額 - 購入費 - 飼育コスト（固定費・治療費は含まない）
+  const runningCost = dailyTotal*days;
+  // 利益 = 販売額 - 購入費 - 飼育コスト
   const totalCost = (c.purchasePrice||0)+runningCost;
   const sellPrice = cow.result?.sellPrice||cow.expectedPrice||null;
   const profit = sellPrice!=null && sellPrice>0 ? sellPrice-totalCost : null;
@@ -842,17 +846,24 @@ export default function App() {
       if(!k) return;
       if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],sellList:[],weightList:[],cows:[]};
       map[k].head++;
+      // 枝肉DG（result.dg → coldWeight÷出荷時日数の順で計算）
       let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
-      if(!dg && c.result?.coldWeight && c.birthDate && c.result?.shippingDate) {
-        const days = Math.floor((new Date(c.result.shippingDate)-new Date(c.birthDate))/86400000);
-        if(days>0) dg = Math.round(c.result.coldWeight/days*1000)/1000;
+      if(!dg && c.result?.coldWeight && c.birthDate) {
+        const sd = c.result?.shippingDate || c.shippingPlan;
+        if(sd) {
+          const dd = Math.floor((new Date(sd)-new Date(c.birthDate))/86400000);
+          if(dd>0) dg = Math.round(c.result.coldWeight/dd*1000)/1000;
+        }
       }
       if(dg) map[k].dgList.push(dg);
       if(c.result?.bms!=null)    map[k].bmsList.push(Number(c.result.bms));
       if(c.result?.loinArea)     map[k].loinList.push(c.result.loinArea);
       if(c.result?.sellPrice)    map[k].sellList.push(c.result.sellPrice);
       if(c.result?.coldWeight)   map[k].weightList.push(c.result.coldWeight);
-      const p=calcCosts(c).profit; if(p!=null) map[k].profits.push(p);
+      // 損益は出荷済みのみ（肥育中は今日まで計算でマイナスになるため除外）
+      if(c.status==="出荷済") {
+        const p=calcCosts(c).profit; if(p!=null) map[k].profits.push(p);
+      }
       map[k].cows.push(c);
     });
     return Object.values(map).map(s=>({
@@ -1736,17 +1747,24 @@ export default function App() {
         if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], sellList:[], weightList:[], cows:[]};
         map[key].head++;
         if(c.status==="死亡") { map[key].deaths++; return; }
+        // 枝肉DG（result.dg → coldWeight÷出荷時日数の順で計算）
         let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
-        if(!dg && c.result?.coldWeight && c.birthDate && c.result?.shippingDate) {
-          const d2 = Math.floor((new Date(c.result.shippingDate)-new Date(c.birthDate))/86400000);
-          if(d2>0) dg = Math.round(c.result.coldWeight/d2*1000)/1000;
+        if(!dg && c.result?.coldWeight && c.birthDate) {
+          const sd = c.result?.shippingDate || c.shippingPlan;
+          if(sd) {
+            const dd = Math.floor((new Date(sd)-new Date(c.birthDate))/86400000);
+            if(dd>0) dg = Math.round(c.result.coldWeight/dd*1000)/1000;
+          }
         }
         if(dg) map[key].dgList.push(dg);
         if(c.result?.bms!=null)    map[key].bmsList.push(Number(c.result.bms));
         if(c.result?.loinArea)     map[key].loinList.push(c.result.loinArea);
         if(c.result?.sellPrice)    map[key].sellList.push(c.result.sellPrice);
         if(c.result?.coldWeight)   map[key].weightList.push(c.result.coldWeight);
-        const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
+        // 損益は出荷済みのみ（肥育中は今日まで計算でマイナスになるため除外）
+        if(c.status==="出荷済") {
+          const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
+        }
         map[key].cows.push(c);
       });
       const list = Object.values(map).map(s=>({
