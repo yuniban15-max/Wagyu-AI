@@ -832,19 +832,21 @@ export default function App() {
   },[cattle]);
 
   // 血統レベル別集計（1=父, 2=父の父, 3=父の父の父）
-  const buildLineageData = (level, shippedOnly=false) => {
+  const buildLineageData = (level, shippedOnly=false, sexFilter="all") => {
     const getKey = (c) => {
       if(level===1) return c.pedigree?.sire?.name;
       if(level===2) return c.pedigree?.dam?.sire?.name;
       if(level===3) return c.pedigree?.dam?.dam?.sire?.name;
       return null;
     };
-    const src = shippedOnly ? cattle.filter(c=>c.status==="出荷済") : cattle;
+    let src = shippedOnly ? cattle.filter(c=>c.status==="出荷済") : cattle;
+    if(sexFilter==="去勢・雄") src = src.filter(c=>c.sex==="去勢"||c.sex==="雄");
+    if(sexFilter==="雌")       src = src.filter(c=>c.sex==="雌");
     const map = {};
     src.forEach(c=>{
       const k = getKey(c);
       if(!k) return;
-      if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],sellList:[],weightList:[],cows:[]};
+      if(!map[k]) map[k]={sire:k,head:0,dgList:[],bmsList:[],loinList:[],profits:[],sellList:[],weightList:[],ageList:[],cows:[]};
       map[k].head++;
       // 枝肉DG（result.dg → coldWeight÷出荷時日数の順で計算）
       let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
@@ -860,8 +862,13 @@ export default function App() {
       if(c.result?.loinArea)     map[k].loinList.push(c.result.loinArea);
       if(c.result?.sellPrice)    map[k].sellList.push(c.result.sellPrice);
       if(c.result?.coldWeight)   map[k].weightList.push(c.result.coldWeight);
-      // 損益は出荷済みのみ（肥育中は今日まで計算でマイナスになるため除外）
-      if(c.status==="出荷済") {
+      // 出荷月齢（出荷済みのみ）
+      if(c.status==="出荷済" && c.birthDate) {
+        const sd2 = c.result?.shippingDate || c.shippingPlan;
+        if(sd2) {
+          const ageM = Math.round((new Date(sd2)-new Date(c.birthDate))/(30.44*86400000)*10)/10;
+          if(ageM>0) map[k].ageList.push(ageM);
+        }
         const p=calcCosts(c).profit; if(p!=null) map[k].profits.push(p);
       }
       map[k].cows.push(c);
@@ -874,6 +881,7 @@ export default function App() {
       avgProfit:    avg(s.profits),
       avgSellPrice: avg(s.sellList),
       avgColdWeight:avg(s.weightList),
+      avgAge:       avg(s.ageList),
     }));
   };
 
@@ -1731,6 +1739,7 @@ export default function App() {
     const [sortMode,   setSortMode]   = useState("head");
     const [farmFilter, setFarmFilter] = useState("all");
     const [shippedOnly,setShippedOnly]= useState(false);
+    const [sexFilter,  setSexFilter]  = useState("all"); // all|去勢・雄|雌
 
     // 導入元の一覧
     const farmList = useMemo(()=>{
@@ -1741,13 +1750,14 @@ export default function App() {
     const breederData = useMemo(()=>{
       let src = farmFilter==="all" ? cattle : cattle.filter(c=>(c.farm||"不明")===farmFilter);
       if(shippedOnly) src = src.filter(c=>c.status==="出荷済");
+      if(sexFilter==="去勢・雄") src = src.filter(c=>c.sex==="去勢"||c.sex==="雄");
+      if(sexFilter==="雌")       src = src.filter(c=>c.sex==="雌");
       const map = {};
       src.forEach(c=>{
         const key = c.name || "不明";
-        if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], sellList:[], weightList:[], cows:[]};
+        if(!map[key]) map[key]={breeder:key, head:0, deaths:0, dgList:[], bmsList:[], loinList:[], profits:[], sellList:[], weightList:[], ageList:[], cows:[]};
         map[key].head++;
         if(c.status==="死亡") { map[key].deaths++; return; }
-        // 枝肉DG（result.dg → coldWeight÷出荷時日数の順で計算）
         let dg = c.result?.dg!=null ? Number(c.result.dg) : null;
         if(!dg && c.result?.coldWeight && c.birthDate) {
           const sd = c.result?.shippingDate || c.shippingPlan;
@@ -1761,8 +1771,13 @@ export default function App() {
         if(c.result?.loinArea)     map[key].loinList.push(c.result.loinArea);
         if(c.result?.sellPrice)    map[key].sellList.push(c.result.sellPrice);
         if(c.result?.coldWeight)   map[key].weightList.push(c.result.coldWeight);
-        // 損益は出荷済みのみ（肥育中は今日まで計算でマイナスになるため除外）
-        if(c.status==="出荷済") {
+        // 出荷月齢（出荷済みのみ）
+        if(c.status==="出荷済" && c.birthDate) {
+          const sd2 = c.result?.shippingDate || c.shippingPlan;
+          if(sd2) {
+            const ageM = Math.round((new Date(sd2)-new Date(c.birthDate))/(30.44*86400000)*10)/10;
+            if(ageM>0) map[key].ageList.push(ageM);
+          }
           const p = calcCosts(c).profit; if(p!=null) map[key].profits.push(p);
         }
         map[key].cows.push(c);
@@ -1775,6 +1790,7 @@ export default function App() {
         avgProfit:     avg(s.profits),
         avgSellPrice:  avg(s.sellList),
         avgColdWeight: avg(s.weightList),
+        avgAge:        avg(s.ageList),
       }));
       return list.sort((a,b)=>{
         if(sortMode==="head")   return b.head-a.head;
@@ -1783,7 +1799,7 @@ export default function App() {
         if(sortMode==="profit") return (b.avgProfit??-Infinity)-(a.avgProfit??-Infinity);
         return 0;
       });
-    },[cattle, sortMode, farmFilter, shippedOnly]);
+    },[cattle, sortMode, farmFilter, shippedOnly, sexFilter]);
 
     const bc = "#e06040";
 
@@ -1809,6 +1825,19 @@ export default function App() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* 性別フィルター */}
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            {[["all","全て"],["去勢・雄","♂ 去勢・雄"],["雌","♀ 雌"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setSexFilter(v)} style={{
+                background: sexFilter===v?`linear-gradient(135deg,${C.purple},#5a3ea0)`:"#fff",
+                color:       sexFilter===v?"#fff":C.textMid,
+                border:`1.5px solid ${sexFilter===v?C.purple:C.border}`,
+                borderRadius:20, padding:"6px 14px",
+                fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0,
+              }}>{l}</button>
+            ))}
           </div>
 
           {/* 並び替え＋出荷済みフィルター */}
@@ -1873,6 +1902,7 @@ export default function App() {
                       {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
                       {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
                       {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
+                      {label:"平均出荷月齢", val:s.avgAge        ?`${Math.round(s.avgAge)}ヶ月`:null,         color:C.teal,      bg:C.tealLight},
                       {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
                     ].map(({label,val,color,bg})=>(
                       <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
@@ -1925,9 +1955,10 @@ export default function App() {
     const [selSire,  setSelSire]  = useState(null);
     const [sortMode, setSortMode] = useState("head");
     const [shippedOnly,setShippedOnly] = useState(false);
+    const [sexFilter,  setSexFilter]   = useState("all");
 
     const data = useMemo(()=>{
-      const list = buildLineageData(genLevel, shippedOnly);
+      const list = buildLineageData(genLevel, shippedOnly, sexFilter);
       return list.sort((a,b)=>{
         if(sortMode==="head")   return b.head-a.head;
         if(sortMode==="dg")     return (b.avgDG??-Infinity)-(a.avgDG??-Infinity);
@@ -1935,7 +1966,7 @@ export default function App() {
         if(sortMode==="profit") return (b.avgProfit??-Infinity)-(a.avgProfit??-Infinity);
         return 0;
       });
-    },[genLevel, sortMode, cattle, shippedOnly]);
+    },[genLevel, sortMode, cattle, shippedOnly, sexFilter]);
 
     const levelLabel = genLevel===1?"父（一代祖）":genLevel===2?"母の父（二代祖）":"母の母の父（三代祖）";
     const levelColor = genLevel===1?C.purple:genLevel===2?"#7b5ea7":"#5a3e8a";
@@ -1972,6 +2003,7 @@ export default function App() {
               {label:"平均BMS",      val:s.avgBMS        ?`${s.avgBMS.toFixed(1)}`:null,              color:C.red,       bg:C.redLight},
               {label:"平均販売価格", val:s.avgSellPrice  ?fmtM(Math.round(s.avgSellPrice)):null,      color:C.amber,     bg:C.amberLight},
               {label:"平均枝肉重量", val:s.avgColdWeight ?`${s.avgColdWeight.toFixed(1)} kg`:null,    color:C.accentDark,bg:C.accentLight},
+              {label:"平均出荷月齢", val:s.avgAge        ?`${Math.round(s.avgAge)}ヶ月`:null,         color:C.teal,      bg:C.tealLight},
               {label:"ロース芯",     val:s.avgLoin       ?`${s.avgLoin.toFixed(1)} cm²`:null,        color:C.purple,    bg:C.purpleLight},
             ].map(({label,val,color,bg})=>(
               <div key={label} style={{background:val?bg:C.cardSub,borderRadius:10,padding:"8px 12px"}}>
@@ -2061,6 +2093,19 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {/* 性別フィルター */}
+          <div style={{display:"flex",gap:6,paddingLeft:16,marginBottom:8}}>
+            {[["all","全て"],["去勢・雄","♂ 去勢・雄"],["雌","♀ 雌"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setSexFilter(v)} style={{
+                background: sexFilter===v?`linear-gradient(135deg,${C.purple},#5a3ea0)`:"#fff",
+                color:       sexFilter===v?"#fff":C.textMid,
+                border:`1.5px solid ${sexFilter===v?C.purple:C.border}`,
+                borderRadius:20, padding:"6px 14px",
+                fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0,
+              }}>{l}</button>
+            ))}
+          </div>
 
         {/* 並び替え＋出荷済みフィルター */}
           <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,paddingLeft:16,paddingRight:16,marginBottom:12,scrollbarWidth:"none"}}>
